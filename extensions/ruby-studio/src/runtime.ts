@@ -221,7 +221,7 @@ export class RuntimeService implements vscode.Disposable {
 		const command = executable === 'ruby' ? sdk.ruby : await findExecutable(executable, env, cwd);
 		if (!command) { throw new Error(api.l10n.t('Executable not found: {0}', executable)); }
 		const rubyArgs = executable === 'ruby' || executable === sdk.ruby ? normalizeRubyArguments(args) : args;
-		const task = new api.Task({ type: 'rubyStudio', command: name }, selected || api.TaskScope.Global, name, 'Ruby Studio', new api.ProcessExecution(command, rubyArgs, { cwd, env }), ['$ruby']);
+		const task = new api.Task({ type: 'rubyStudio', command: name }, selected || api.TaskScope.Global, name, 'Ruby Studio', new api.ProcessExecution(command, rubyArgs, { cwd, env }), ['$rubyStudioRuntime']);
 		task.presentationOptions = { reveal: api.TaskRevealKind.Always, panel: api.TaskPanelKind.Dedicated, clear: true };
 		return api.tasks.executeTask(task);
 	}

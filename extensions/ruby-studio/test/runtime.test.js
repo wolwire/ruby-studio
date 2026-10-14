@@ -78,3 +78,24 @@ test('Bundler activates the installed locked version before setup can re-execute
 	const { stdout } = await execute(plan.executable, plan.args, { cwd: plan.cwd, env: plan.env });
 	assert.equal(stdout.trim(), locked);
 });
+
+test('real Ruby warnings and syntax errors retain different task diagnostic severities', async () => {
+	const matcher = require('../package.json').contributes.problemMatchers.find(value => value.name === 'rubyStudioRuntime');
+	assert.ok(matcher);
+	const pattern = new RegExp(matcher.pattern.regexp);
+	const warningFile = path.join(directory, 'warning.rb');
+	await fs.writeFile(warningFile, 'unused = 1\n');
+	const warning = await execute(sdk.ruby, ['-w', warningFile], { cwd: sdk.cwd, env: sdk.env });
+	const warningMatch = warning.stderr.split('\n').map(line => pattern.exec(line)).find(Boolean);
+	assert.equal(warningMatch?.[matcher.pattern.file], warningFile);
+	assert.equal(warningMatch?.[matcher.pattern.severity], 'warning');
+	const errorFile = path.join(directory, 'syntax_error.rb');
+	await fs.writeFile(errorFile, '(\n');
+	await assert.rejects(execute(sdk.ruby, ['-c', errorFile], { cwd: sdk.cwd, env: sdk.env }), error => {
+		const errorMatch = error.stderr.split('\n').map(line => pattern.exec(line)).find(Boolean);
+		assert.equal(errorMatch?.[matcher.pattern.file], errorFile);
+		assert.equal(errorMatch?.[matcher.pattern.severity] || matcher.severity, 'error');
+		assert.match(errorMatch?.[matcher.pattern.message] || '', /syntax error/);
+		return true;
+	});
+});
