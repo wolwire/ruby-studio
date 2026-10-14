@@ -1,11 +1,34 @@
 <!-- Copyright (c) Microsoft Corporation. All rights reserved.
      Licensed under the MIT License. See License.txt in the project root. -->
 
-# Build Ruby Studio on Linux x64
+# Build Ruby Studio on Windows, Linux and macOS
 
 Run commands from this checkout. The scripts also work when invoked by an absolute path from another directory. They build the desktop app and the original Rust lexer worker; they do not install the app system-wide.
 
-## First build
+## Cross-platform entry point
+
+Build each package on a matching native host. The supported targets are Linux x64, Windows x64, macOS Intel x64 and macOS Apple Silicon arm64. Windows ARM and Linux ARM are not enabled in this pipeline.
+
+From a checkout with Node, npm and Rust on PATH:
+
+```sh
+node scripts/ruby-studio.mjs setup
+node scripts/ruby-studio.mjs build
+node scripts/ruby-studio.mjs test
+node scripts/ruby-studio.mjs package
+# Or, after satisfying prerequisites:
+node scripts/ruby-studio.mjs build --setup --check --package
+```
+
+On Linux, add `--ci-toolchain` to setup (or to build with `--setup`) to download the upstream compiler/sysroots. The portable entry point delegates Linux to the existing Bash scripts. Windows/macOS use native commands without requiring Bash locally. Builds use the checkout's `.nvmrc`; Node and the host architecture must match the target.
+
+On Windows, install Visual Studio 2022 with Desktop development with C++, the v143 toolset, x64/x86 Spectre-mitigated libraries, C++ ATL/MFC Spectre libraries, a Windows SDK, Python and Git. Add the SDK's x64 `signtool.exe` directory and 7-Zip's `7z.exe` to PATH. `vs2022_install` can select a custom Visual Studio installation. The setup command patches Electron/V8 headers before root dependencies are installed, as the upstream Windows workflow requires. Use RubyInstaller Ruby 3.3 with its Devkit and the test gems below. GitHub's Windows runner supplies these native prerequisites.
+
+On macOS, install Xcode command-line tools (`xcode-select --install`), Python with setuptools, Git, Rust, Node and Ruby. Activate the Intel or Apple Silicon versions matching your machine. The script supplies the upstream `kerberos_use_rtld=false` build definition. macOS archives use `ditto` to preserve `.app` framework links and executable modes.
+
+Outputs are `../VSCode-linux-x64/ruby-studio`, `../VSCode-win32-x64/Ruby Studio.exe`, and `../VSCode-darwin-{x64,arm64}/Ruby Studio.app`. Archives in `dist/ruby-studio` are Linux `.tar.gz`, Windows portable `.zip`, and separate Intel/Apple Silicon macOS `.zip` bundles. Each includes build metadata and SHA-256 checksums. These are development distributions: the pipeline does not provide Windows Authenticode signing, Apple Developer signing/notarization, DMG or EXE installers. OS download security prompts can apply. Ruby itself and project gems are selected/installed separately; they are not bundled with the IDE.
+
+## Linux first build
 
 Install Node.js using the version in `.nvmrc` (currently 24.15.0), npm below version 12, stable Rust with Cargo, and Ruby 3.1 or newer. Ruby must provide JSON, RubyGems and OpenSSL. Node must stay in the major version specified by `.nvmrc`; the scripts check this before starting.
 
@@ -89,7 +112,7 @@ Useful environment variables:
 - `RUBY_STUDIO_TOOLCHAIN_DIR`: optional private toolchain root; defaults to `../toolchain`.
 - `RUBY_STUDIO_USE_LOCAL_TOOLCHAIN=0`: use only tools from `PATH`, as CI does.
 - `RUBY_STUDIO_LOG_DIR`: persistent log directory for a coordinated run.
-- `RUBY_STUDIO_APP_DIR`: existing app directory for testing/packaging. Full builds always write the upstream `../VSCode-linux-x64` target.
+- `RUBY_STUDIO_APP_DIR`: existing app directory for testing/packaging. Full builds always write the upstream `../VSCode-PLATFORM-ARCH` target (on macOS pass its containing directory, or a `.app` path only for testing/packaging).
 - `RUBY_STUDIO_ARTIFACT_DIR`: archive destination; defaults to `dist/ruby-studio`.
 - `CARGO_TARGET_DIR`: supported custom native build output directory.
 
@@ -97,8 +120,8 @@ If Ruby is supplied by a version manager, activate that environment before runni
 
 ## GitHub Actions
 
-`.github/workflows/ruby-studio-linux.yml` runs on pushes, pull requests and manual dispatch. It installs the Node version from `.nvmrc`, Ruby test dependencies and the upstream native compiler; compiles before running unit, Rust, lexer-parity and Xvfb desktop tests; then archives only the successfully tested app. The distribution and logs are separate downloadable artifacts, retained for 14 days. Logs upload even when a build or test fails. Existing upstream workflows are preserved. Checkout leaves the inherited Copilot simulation SQLite caches as LFS pointers; those caches are not part of this desktop build or its test suite.
+`.github/workflows/ruby-studio-build.yml` (**Ruby Studio Desktop**) runs on pushes, pull requests and manual dispatch with four independent native runner jobs: Ubuntu 24.04 x64, Windows Server 2022 x64, macOS 15 Intel and macOS 15 Apple Silicon. A failed job does not cancel the other platforms. It installs the Node version from `.nvmrc`, Ruby test dependencies and the upstream native compiler; compiles before running unit, Rust, lexer-parity and Xvfb desktop tests; then archives only the successfully tested app for each platform. All platforms run the extension-host integration and dedicated native settings-window tests; the existing Linux `/proc` process-group assertion is explicitly Linux-only. The distribution and logs are separate, platform-named downloadable artifacts, retained for 14 days. Artifact names include the full checkout SHA and archive names include its abbreviated build receipt SHA. Logs upload even when a build or test fails. Existing upstream workflows are preserved. Checkout leaves the inherited Copilot simulation SQLite caches as LFS pointers; those caches are not part of this desktop build or its test suite.
 
 The workflow uses read-only repository permissions and commit-pinned actions. Action versions were checked against their primary release documentation on 2026-10-14: [checkout 7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1), [setup-node 7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0), [upload-artifact 7.0.2](https://github.com/actions/upload-artifact/releases/tag/v7.0.2), and [setup-ruby 1.327.0](https://github.com/ruby/setup-ruby/releases/tag/v1.327.0). The [workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax) and [artifact action documentation](https://github.com/actions/upload-artifact) describe the triggers and upload behavior used here.
 
-After the workflow is committed and pushed to the fork, open its **Actions → Ruby Studio Linux x64** page to view results or use **Run workflow**. The scripts themselves do not push commits, publish releases or upload artifacts outside a workflow run.
+After the workflow is committed and pushed to the fork, open its **Actions → Ruby Studio Desktop** page to view results or use **Run workflow**. The scripts themselves do not push commits, publish releases or upload artifacts outside a workflow run.
