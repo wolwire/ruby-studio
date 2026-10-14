@@ -23,6 +23,7 @@ import * as cp from 'child_process';
 import * as i18n from './lib/i18n.ts';
 import { getProductionDependencies } from './lib/dependencies.ts';
 import { config } from './lib/electron.ts';
+import type { IExtensionDefinition } from './lib/builtInExtensions.ts';
 import { createAsar } from './lib/asar.ts';
 import minimist from 'minimist';
 import { compileBuildWithoutManglingTask, compileBuildWithManglingTask } from './gulpfile.compile.ts';
@@ -258,7 +259,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
 			.pipe(rename(function (path) { path.dirname = path.dirname!.replace(new RegExp('^' + out), 'out'); }))
 			.pipe(util.setExecutableBit(['**/*.sh']));
 
-		const platformSpecificBuiltInExtensionsExclusions = product.builtInExtensions.filter(ext => {
+		const platformSpecificBuiltInExtensionsExclusions = (product.builtInExtensions as IExtensionDefinition[]).filter(ext => {
 			if (!(ext as { platforms?: string[] }).platforms) {
 				return false;
 			}
@@ -595,6 +596,9 @@ function prepareCopilotRipgrepShimTask(platform: string, arch: string, destinati
 	const outputDir = path.join(path.dirname(root), destinationFolderName);
 
 	return async () => {
+		if (!('defaultChatAgent' in product)) {
+			return;
+		}
 		// On Windows with win32VersionedUpdate, app resources live under a
 		// commit-hash prefix: {output}/{commitHash}/resources/app/
 		const versionedResourcesFolder = util.getVersionedResourcesFolder(platform, commit!);
@@ -604,6 +608,9 @@ function prepareCopilotRipgrepShimTask(platform: string, arch: string, destinati
 		const appNodeModulesDir = path.join(appBase, 'node_modules');
 
 		const builtInCopilotExtensionDir = path.join(appBase, 'extensions', 'copilot');
+		if (!fs.existsSync(builtInCopilotExtensionDir)) {
+			return;
+		}
 		prepareBuiltInCopilotRipgrepShim(platform, arch, builtInCopilotExtensionDir, appNodeModulesDir);
 	};
 }

@@ -1,0 +1,552 @@
+{
+	"name": "ruby-studio",
+	"publisher": "ruby-studio",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "0.1.0",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.123.0"
+	},
+	"categories": [
+		"Programming Languages",
+		"Debuggers",
+		"Testing",
+		"Themes"
+	],
+	"main": "./out/extension.js",
+	"activationEvents": [
+		"onStartupFinished",
+		"onLanguage:ruby",
+		"onLanguage:erb",
+		"onDebug:rubyStudio"
+	],
+	"capabilities": {
+		"virtualWorkspaces": false,
+		"untrustedWorkspaces": {
+			"supported": "limited",
+			"description": "Static indexing is available. Running Ruby, tests, queries and HTTP requests requires trust."
+		}
+	},
+	"contributes": {
+		"commands": [
+			{
+				"command": "rubyStudio.runCurrent",
+				"title": "%command.runCurrent%",
+				"category": "Ruby Studio",
+				"icon": "$(play)"
+			},
+			{
+				"command": "rubyStudio.debugCurrent",
+				"title": "%command.debugCurrent%",
+				"category": "Ruby Studio",
+				"icon": "$(debug-alt)"
+			},
+			{
+				"command": "rubyStudio.runTests",
+				"title": "%command.runTests%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.pickConfiguration",
+				"title": "%command.pickConfiguration%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.runConfiguration",
+				"title": "%command.runConfiguration%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.stop",
+				"title": "%command.stop%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.selectInterpreter",
+				"title": "%command.selectInterpreter%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.openConsole",
+				"title": "%command.openConsole%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.manageGems",
+				"title": "%command.manageGems%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.runRake",
+				"title": "%command.runRake%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.railsConsole",
+				"title": "%command.railsConsole%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.railsServer",
+				"title": "%command.railsServer%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.generateRails",
+				"title": "%command.generateRails%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.migrateRails",
+				"title": "%command.migrateRails%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.railsRoutes",
+				"title": "%command.railsRoutes%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.relatedFile",
+				"title": "%command.relatedFile%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.refreshRails",
+				"title": "%command.refreshRails%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.createProject",
+				"title": "%command.createProject%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.bundleInstall",
+				"title": "%command.bundleInstall%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.bundleUpdate",
+				"title": "%command.bundleUpdate%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.installGem",
+				"title": "%command.installGem%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.refreshGems",
+				"title": "%command.refreshGems%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.gemDependencies",
+				"title": "%command.gemDependencies%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.sendRequest",
+				"title": "%command.sendRequest%",
+				"category": "Ruby Studio",
+				"icon": "$(send)"
+			},
+			{
+				"command": "rubyStudio.openDatabase",
+				"title": "%command.openDatabase%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.queryDatabase",
+				"title": "%command.queryDatabase%",
+				"category": "Ruby Studio",
+				"icon": "$(database)"
+			},
+			{
+				"command": "rubyStudio.refreshDatabase",
+				"title": "%command.refreshDatabase%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.refreshTests",
+				"title": "Refresh Ruby Tests",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.runSelected",
+				"title": "%command.runSelected%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.debugSelected",
+				"title": "%command.debugSelected%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.rebuildIndex",
+				"title": "%command.rebuildIndex%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.languageStatus",
+				"title": "%command.languageStatus%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.gotoClass",
+				"title": "Go to Ruby Class",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.cancelTests",
+				"title": "Stop Ruby Tests",
+				"category": "Ruby Studio"
+			}
+		],
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "rubyStudio",
+					"title": "Ruby Studio",
+					"icon": "media/activity-ruby.svg"
+				}
+			]
+		},
+		"views": {
+			"rubyStudio": [
+				{
+					"id": "rubyStudio.rails",
+					"name": "Rails"
+				},
+				{
+					"id": "rubyStudio.gems",
+					"name": "Ruby SDK and Gems"
+				},
+				{
+					"id": "rubyStudio.database",
+					"name": "Database"
+				}
+			]
+		},
+		"themes": [
+			{
+				"id": "Ruby Studio Dark",
+				"label": "Ruby Studio Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/ruby-studio-dark.json"
+			}
+		],
+		"configuration": {
+			"title": "Ruby Studio",
+			"properties": {
+				"rubyStudio.interpreterPath": {
+					"type": "string",
+					"default": "",
+					"scope": "resource",
+					"description": "Ruby executable or version-manager shim for this project."
+				},
+				"rubyStudio.runConfiguration": {
+					"type": "string",
+					"default": "",
+					"scope": "resource",
+					"description": "Selected name in .ruby-studio/run-configurations.json."
+				},
+				"rubyStudio.language.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Use the built-in original Ruby language service."
+				},
+				"rubyStudio.syntaxCheck": {
+					"type": "boolean",
+					"default": true,
+					"description": "Check Ruby syntax with the selected interpreter in trusted workspaces."
+				},
+				"rubyStudio.languageDiagnostics": {
+					"type": "boolean",
+					"default": true,
+					"description": "Report conservative static Ruby inspections."
+				},
+				"rubyStudio.maxIndexedFiles": {
+					"type": "number",
+					"default": 2000,
+					"minimum": 1,
+					"maximum": 10000,
+					"description": "Maximum Ruby files indexed per workspace folder."
+				}
+			}
+		},
+		"configurationDefaults": {
+			"workbench.colorTheme": "Ruby Studio Dark",
+			"window.commandCenter": false,
+			"workbench.startupEditor": "none",
+			"workbench.sideBar.location": "left",
+			"workbench.panel.defaultLocation": "bottom",
+			"workbench.editor.tabSizing": "shrink",
+			"workbench.tree.indent": 16,
+			"breadcrumbs.enabled": true,
+			"editor.fontFamily": "'JetBrains Mono', 'DejaVu Sans Mono', monospace",
+			"editor.fontSize": 14,
+			"editor.lineHeight": 23,
+			"editor.minimap.enabled": false,
+			"editor.renderLineHighlight": "all",
+			"editor.bracketPairColorization.enabled": true,
+			"chat.disableAIFeatures": true,
+			"[ruby]": {
+				"editor.tabSize": 2,
+				"editor.insertSpaces": true,
+				"editor.defaultFormatter": "ruby-studio.ruby-studio",
+				"editor.detectIndentation": false
+			},
+			"[erb]": {
+				"editor.tabSize": 2,
+				"editor.insertSpaces": true
+			}
+		},
+		"keybindings": [
+			{
+				"key": "shift+f10",
+				"command": "rubyStudio.runCurrent",
+				"when": "editorLangId == ruby"
+			},
+			{
+				"key": "shift+f9",
+				"command": "rubyStudio.debugCurrent",
+				"when": "editorLangId == ruby"
+			},
+			{
+				"key": "alt+1",
+				"command": "workbench.view.explorer"
+			},
+			{
+				"key": "alt+4",
+				"command": "workbench.action.terminal.toggleTerminal"
+			},
+			{
+				"key": "alt+7",
+				"command": "outline.focus"
+			},
+			{
+				"key": "alt+9",
+				"command": "workbench.view.scm"
+			},
+			{
+				"key": "alt+f12",
+				"command": "workbench.action.terminal.toggleTerminal"
+			},
+			{
+				"key": "ctrl+n",
+				"command": "rubyStudio.gotoClass"
+			},
+			{
+				"key": "ctrl+shift+n",
+				"command": "workbench.action.quickOpen"
+			},
+			{
+				"key": "ctrl+b",
+				"command": "editor.action.revealDefinition",
+				"when": "editorTextFocus"
+			},
+			{
+				"key": "shift+f6",
+				"command": "editor.action.rename",
+				"when": "editorTextFocus"
+			},
+			{
+				"key": "ctrl+alt+l",
+				"command": "editor.action.formatDocument",
+				"when": "editorTextFocus"
+			},
+			{
+				"key": "f8",
+				"command": "workbench.action.debug.stepOver",
+				"when": "debugState == stopped"
+			},
+			{
+				"key": "f7",
+				"command": "workbench.action.debug.stepInto",
+				"when": "debugState == stopped"
+			},
+			{
+				"key": "shift+f8",
+				"command": "workbench.action.debug.stepOut",
+				"when": "debugState == stopped"
+			},
+			{
+				"key": "ctrl+f8",
+				"command": "editor.debug.action.toggleBreakpoint",
+				"when": "editorTextFocus"
+			},
+			{
+				"key": "alt+f8",
+				"command": "workbench.debug.action.focusRepl",
+				"when": "inDebugMode"
+			},
+			{
+				"key": "ctrl+alt+shift+t",
+				"command": "editor.action.refactor",
+				"when": "editorTextFocus"
+			},
+			{
+				"key": "ctrl+alt+home",
+				"command": "rubyStudio.relatedFile"
+			},
+			{
+				"key": "ctrl+enter",
+				"command": "rubyStudio.sendRequest",
+				"when": "editorLangId == http"
+			}
+		],
+		"menus": {
+			"editor/title": [
+				{
+					"command": "rubyStudio.runCurrent",
+					"when": "resourceLangId == ruby",
+					"group": "navigation@1"
+				},
+				{
+					"command": "rubyStudio.debugCurrent",
+					"when": "resourceLangId == ruby",
+					"group": "navigation@2"
+				},
+				{
+					"command": "rubyStudio.sendRequest",
+					"when": "resourceLangId == http",
+					"group": "navigation@1"
+				},
+				{
+					"command": "rubyStudio.queryDatabase",
+					"when": "resourceLangId == sql",
+					"group": "navigation@1"
+				}
+			],
+			"view/title": [
+				{
+					"command": "rubyStudio.refreshRails",
+					"when": "view == rubyStudio.rails",
+					"group": "navigation"
+				},
+				{
+					"command": "rubyStudio.refreshGems",
+					"when": "view == rubyStudio.gems",
+					"group": "navigation"
+				},
+				{
+					"command": "rubyStudio.openDatabase",
+					"when": "view == rubyStudio.database",
+					"group": "navigation"
+				}
+			]
+		},
+		"debuggers": [
+			{
+				"type": "rubyStudio",
+				"label": "Ruby Studio",
+				"languages": [
+					"ruby"
+				],
+				"configurationAttributes": {
+					"launch": {
+						"required": [
+							"script"
+						],
+						"properties": {
+							"script": {
+								"type": "string",
+								"description": "Ruby program to debug."
+							},
+							"args": {
+								"type": "array",
+								"items": {
+									"type": "string"
+								},
+								"default": []
+							},
+							"cwd": {
+								"type": "string"
+							},
+							"env": {
+								"type": "object",
+								"additionalProperties": {
+									"type": "string"
+								}
+							},
+							"stopOnEntry": {
+								"type": "boolean",
+								"default": false
+							}
+						}
+					}
+				},
+				"initialConfigurations": [
+					{
+						"type": "rubyStudio",
+						"request": "launch",
+						"name": "Debug Current Ruby File",
+						"script": "${file}",
+						"cwd": "${workspaceFolder}"
+					}
+				]
+			}
+		],
+		"languages": [
+			{
+				"id": "http",
+				"aliases": [
+					"HTTP Request"
+				],
+				"extensions": [
+					".http",
+					".rest"
+				],
+				"configuration": "./http-language.json"
+			},
+			{
+				"id": "erb",
+				"aliases": [
+					"ERB",
+					"Embedded Ruby"
+				],
+				"extensions": [
+					".erb"
+				],
+				"configuration": "./erb-language.json"
+			}
+		],
+		"problemMatchers": [
+			{
+				"name": "ruby",
+				"owner": "ruby",
+				"source": "Ruby",
+				"severity": "error",
+				"fileLocation": "absolute",
+				"pattern": {
+					"regexp": "^(.+):(\\d+):\\s*(.+)$",
+					"file": 1,
+					"line": 2,
+					"message": 3
+				}
+			}
+		],
+		"jsonValidation": [
+			{
+				"fileMatch": [
+					".ruby-studio/run-configurations.json"
+				],
+				"url": "./schemas/run-configurations.schema.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "erb",
+				"scopeName": "text.html.erb",
+				"path": "./syntaxes/erb.tmLanguage.json",
+				"embeddedLanguages": {
+					"source.ruby": "ruby",
+					"text.html.basic": "html"
+				}
+			}
+		]
+	}
+}

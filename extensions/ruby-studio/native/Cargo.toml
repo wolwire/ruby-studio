@@ -1,0 +1,13 @@
+[package]
+name = "ruby-studio-lexer"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+description = "Original bounded Ruby lexer worker for Ruby Studio"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

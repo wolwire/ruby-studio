@@ -1,0 +1,35 @@
+{
+	"name": "ERB",
+	"scopeName": "text.html.erb",
+	"patterns": [
+		{
+			"name": "comment.block.erb",
+			"begin": "<%#",
+			"end": "-?%>"
+		},
+		{
+			"name": "meta.embedded.block.ruby",
+			"contentName": "source.ruby",
+			"begin": "<%[=-]?",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.section.embedded.begin.erb"
+				}
+			},
+			"end": "-?%>",
+			"endCaptures": {
+				"0": {
+					"name": "punctuation.section.embedded.end.erb"
+				}
+			},
+			"patterns": [
+				{
+					"include": "source.ruby"
+				}
+			]
+		},
+		{
+			"include": "text.html.basic"
+		}
+	]
+}

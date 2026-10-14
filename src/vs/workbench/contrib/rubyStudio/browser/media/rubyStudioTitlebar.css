@@ -1,0 +1,161 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.monaco-workbench .part.titlebar .ruby-studio-titlebar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	height: 100%;
+	padding: 0 4px;
+	white-space: nowrap;
+	-webkit-app-region: no-drag;
+}
+
+.ruby-studio-titlebar .ruby-studio-identity {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	max-width: 240px;
+	margin-right: 8px;
+	font-size: 12px;
+}
+
+.monaco-workbench .part.titlebar .ruby-studio-titlebar .ruby-studio-logo {
+	color: var(--vscode-errorForeground);
+	font-size: 18px;
+}
+
+.ruby-studio-titlebar .ruby-studio-wordmark {
+	font-weight: 600;
+	letter-spacing: -0.15px;
+}
+
+.ruby-studio-titlebar .ruby-studio-project {
+	overflow: hidden;
+	max-width: 140px;
+	padding-left: 8px;
+	border-left: 1px solid var(--vscode-titleBar-border, var(--vscode-commandCenter-border, transparent));
+	text-overflow: ellipsis;
+	opacity: 0.75;
+}
+
+.ruby-studio-titlebar .ruby-studio-execution {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 0 4px;
+	border-left: 1px solid var(--vscode-commandCenter-border, transparent);
+	border-right: 1px solid var(--vscode-commandCenter-border, transparent);
+}
+
+.ruby-studio-titlebar .ruby-studio-control {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: 26px;
+	min-width: 28px;
+	margin: 0;
+	padding: 0 6px;
+	border: 1px solid transparent;
+	border-radius: 5px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-size: 12px;
+	cursor: pointer;
+	-webkit-app-region: no-drag;
+}
+
+.ruby-studio-titlebar .ruby-studio-control:not(:disabled):hover {
+	background: var(--vscode-toolbar-hoverBackground);
+	outline: 1px solid var(--vscode-toolbar-hoverOutline, transparent);
+	outline-offset: -1px;
+}
+
+.ruby-studio-titlebar .ruby-studio-control:not(:disabled):active {
+	background: var(--vscode-toolbar-activeBackground);
+}
+
+.ruby-studio-titlebar .ruby-studio-control:focus-visible {
+	outline: 1px solid var(--vscode-focusBorder);
+	outline-offset: -1px;
+}
+
+.ruby-studio-titlebar .ruby-studio-control:disabled {
+	opacity: 0.38;
+	cursor: default;
+}
+
+.ruby-studio-titlebar .ruby-studio-control[aria-busy="true"] {
+	opacity: 0.6;
+}
+
+.ruby-studio-titlebar .ruby-studio-configuration {
+	flex-direction: row-reverse;
+	max-width: 180px;
+	border-color: var(--vscode-commandCenter-border, transparent);
+	background: var(--vscode-commandCenter-background, transparent);
+}
+
+.ruby-studio-titlebar .ruby-studio-interpreter {
+	max-width: 160px;
+}
+
+.ruby-studio-titlebar .ruby-studio-control-caption {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.monaco-workbench .part.titlebar .ruby-studio-titlebar .ruby-studio-run .codicon {
+	color: var(--vscode-debugIcon-startForeground);
+}
+
+.monaco-workbench .part.titlebar .ruby-studio-titlebar .ruby-studio-stop .codicon {
+	color: var(--vscode-debugIcon-stopForeground);
+}
+
+.monaco-workbench .part.titlebar .ruby-studio-titlebar .ruby-studio-interpreter .codicon {
+	color: var(--vscode-textLink-foreground);
+}
+
+@media (max-width: 1400px) {
+	.ruby-studio-titlebar .ruby-studio-wordmark {
+		display: none;
+	}
+	.ruby-studio-titlebar .ruby-studio-project {
+		max-width: 115px;
+	}
+}
+
+@media (max-width: 1120px) {
+	.ruby-studio-titlebar .ruby-studio-project {
+		display: none;
+	}
+	.ruby-studio-titlebar .ruby-studio-identity {
+		margin-right: 0;
+	}
+	.ruby-studio-titlebar .ruby-studio-configuration {
+		max-width: 130px;
+	}
+	.ruby-studio-titlebar .ruby-studio-interpreter .ruby-studio-control-caption {
+		display: none;
+	}
+}
+
+@media (max-width: 880px) {
+	.ruby-studio-titlebar .ruby-studio-control-caption {
+		display: none;
+	}
+	.monaco-workbench .part.titlebar .ruby-studio-titlebar {
+		gap: 2px;
+	}
+	.ruby-studio-titlebar .ruby-studio-control {
+		min-width: 26px;
+		padding: 0 4px;
+	}
+}

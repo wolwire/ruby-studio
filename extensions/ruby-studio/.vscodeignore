@@ -1,0 +1,10 @@
+src/**
+test/**
+out/**
+**/*.map
+*.mts
+tsconfig.json
+native/target/**
+native/src/**
+native/Cargo.*
+native/tests/**
