@@ -14,7 +14,7 @@ let sdk;
 const bridgePath = path.resolve(__dirname, '../ruby/debug_bridge.rb');
 
 before(async () => {
-	directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ruby studio debug-'));
+	directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ruby studio debug-')));
 	sdk = await resolveRuntime({ cwd: directory, configuredPath: process.env.RUBY_STUDIO_RUBY || 'ruby', trusted: true });
 });
 after(async () => { await fs.rm(directory, { recursive: true, force: true }); });

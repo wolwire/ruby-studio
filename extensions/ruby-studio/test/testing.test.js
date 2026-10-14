@@ -45,7 +45,7 @@ function events(result) {
 	return result.stdout.split(/\r?\n/).map(line => parseTestEvent(line)).filter(Boolean);
 }
 function fixture(t, name, source) {
-	const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ruby-studio-tests-'));
+	const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ruby-studio-tests-')));
 	t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
 	const file = path.join(directory, name);
 	fs.writeFileSync(file, source);
@@ -72,7 +72,7 @@ end
 	const result = spawnSync(ruby, [helper('minitest_runner.rb'), JSON.stringify({ files: [file] })], { encoding: 'utf8', timeout: 15000 });
 	assert.equal(result.status, 1, result.stderr);
 	const finished = events(result).filter(event => event.event === 'finished');
-	assert.deepEqual(finished.map(event => [event.name, event.status, event.file, event.line]).sort(), [
+	assert.deepEqual(finished.map(event => [event.name, event.status, path.normalize(event.file), event.line]).sort(), [
 		['test_error', 'errored', file, 9], ['test_fail', 'failed', file, 6], ['test_pass', 'passed', file, 3], ['test_skip', 'skipped', file, 12]
 	]);
 	assert.ok(finished.every(event => typeof event.duration === 'number' && event.duration >= 0));

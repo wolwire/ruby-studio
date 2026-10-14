@@ -70,7 +70,7 @@ exports.run = async function run() {
 		const folder = vscode.workspace.workspaceFolders?.[0];
 		assert.ok(folder && folder.uri.scheme === 'file', 'The launcher must open a local disposable workspace.');
 		assert.equal(vscode.workspace.isTrusted, true, 'The disposable integration workspace must be trusted explicitly by the launcher.');
-		directory = await fs.mkdtemp(path.join(folder.uri.fsPath, 'ruby-studio-integration-'));
+		directory = await fs.realpath(await fs.mkdtemp(path.join(folder.uri.fsPath, 'ruby-studio-integration-')));
 		const extension = vscode.extensions.getExtension('ruby-studio.ruby-studio');
 		assert.ok(extension, 'The original built-in Ruby Studio extension is present.');
 		await timeout(extension.activate(), 'Ruby Studio Activation');
@@ -317,7 +317,7 @@ exports.run = async function run() {
 				assert.equal(stopped.body.reason, 'breakpoint');
 				assert.ok(debugSession, 'The real tracker supplied the DebugSession.');
 				const stack = await timeout(debugSession.customRequest('stackTrace', { threadId: 1 }), 'DAP Stack Trace');
-				assert.equal(stack.stackFrames[0].source.path, uri.fsPath);
+				assert.equal(await fs.realpath(stack.stackFrames[0].source.path), await fs.realpath(uri.fsPath));
 				assert.equal(stack.stackFrames[0].line, breakpointLine + 1);
 				const scopes = await timeout(debugSession.customRequest('scopes', { frameId: stack.stackFrames[0].id }), 'DAP Scopes');
 				const locals = scopes.scopes.find(scope => scope.name === 'Locals'); assert.ok(locals);

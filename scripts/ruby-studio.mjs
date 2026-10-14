@@ -88,6 +88,9 @@ async function main() {
 	}
 	async function native() {
 		if (process.env.CARGO_BUILD_TARGET) { throw new Error('Remove CARGO_BUILD_TARGET: these builds require the native host worker.'); }
+		const rustHost = execFileSync('rustc', ['-vV'], { encoding: 'utf8' }).match(/^host: (.+)$/m)?.[1];
+		const expected = host.platform === 'win32' ? 'x86_64-pc-windows-msvc' : `${host.arch === 'arm64' ? 'aarch64' : 'x86_64'}-apple-darwin`;
+		if (rustHost !== expected) { throw new Error(`Use the matching native Rust toolchain: expected ${expected}, found ${rustHost}.`); }
 		await run('build-native', 'cargo', ['build', '--release', '--locked', '--manifest-path', 'extensions/ruby-studio/native/Cargo.toml']);
 		const built = path.resolve(source, process.env.CARGO_TARGET_DIR || 'extensions/ruby-studio/native/target', 'release', host.worker);
 		process.env.RUBY_STUDIO_NATIVE_LEXER = built;
@@ -114,6 +117,8 @@ async function main() {
 		const checkResult = file => { const report = json(file); if (!report.success || !report.checks?.length || report.checks.some(check => check.status !== 'passed')) { throw new Error(`Desktop test did not report success: ${file}`); } };
 		try {
 			fs.mkdirSync(path.join(qa, 'workspace'));
+			fs.rmSync(result, { force: true });
+			fs.rmSync(path.join(log, 'settings-window.json'), { force: true });
 			process.env.RUBY_STUDIO_INTEGRATION_RESULT = result;
 			await run('test-integration', layout.executable, ['--disable-gpu', '--disable-workspace-trust', `--user-data-dir=${path.join(qa, 'profile')}`, `--extensions-dir=${path.join(qa, 'extensions')}`, `--extensionDevelopmentPath=${path.join(layout.resources, 'extensions/ruby-studio')}`, `--extensionTestsPath=${path.join(source, 'extensions/ruby-studio/test/integration.js')}`, path.join(qa, 'workspace')], source, 5 * 60 * 1000);
 			checkResult(result);
