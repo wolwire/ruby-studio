@@ -241,6 +241,8 @@ module RubyStudio
   end
 end
 
+arguments = ENV.delete('RUBY_STUDIO_DEBUG_ARGUMENTS')
+ARGV.concat(JSON.parse(arguments)) if arguments
 target = ARGV.shift
 abort 'A Ruby script is required' unless target
 RubyStudio::DebugBridge.new(target).run

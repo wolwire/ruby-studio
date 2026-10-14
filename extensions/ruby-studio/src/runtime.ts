@@ -57,9 +57,10 @@ export function expandRuntimeValue(value: string, cwd: string, env: NodeJS.Proce
 
 /** Locate a command without shell evaluation or project hooks. */
 export async function findExecutable(command: string, env: NodeJS.ProcessEnv, cwd: string): Promise<string | undefined> {
+	const searchPath = env.PATH || (process.platform === 'win32' ? Object.entries(env).find(([key]) => key.toUpperCase() === 'PATH')?.[1] : '') || '';
 	const candidates = path.isAbsolute(command) || command.includes('/') || command.includes('\\')
 		? [path.resolve(cwd, command)]
-		: (env.PATH || '').split(path.delimiter).filter(Boolean).map(directory => path.join(directory, command));
+		: searchPath.split(path.delimiter).filter(Boolean).map(directory => path.join(directory, command));
 	for (const candidate of candidates) {
 		for (const suffix of process.platform === 'win32' ? ['', '.exe', '.cmd', '.bat'] : ['']) {
 			try {
@@ -96,6 +97,13 @@ export async function resolveRuntime(options: RuntimeResolutionOptions): Promise
 	const cwd = await fs.realpath(options.cwd);
 	if (!(await fs.stat(cwd)).isDirectory()) { throw new Error('The Ruby working directory must be a folder.'); }
 	const env = { ...(options.env || process.env) };
+	if (process.platform === 'win32') {
+		// A spread copies Windows' case-insensitive process.env into an ordinary
+		// object. Canonicalize Path before adding the selected SDK directory.
+		for (const key of Object.keys(env)) {
+			if (key !== 'PATH' && key.toUpperCase() === 'PATH') { env.PATH ??= env[key]; delete env[key]; }
+		}
+	}
 	if (options.configuredPath?.trim()) {
 		const configured = expandRuntimeValue(options.configuredPath.trim(), cwd, env);
 		const executable = await findExecutable(configured, env, cwd);
