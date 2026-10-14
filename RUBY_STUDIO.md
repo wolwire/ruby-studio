@@ -4,10 +4,20 @@ The bundled original Ruby implementation is in `extensions/ruby-studio`. Native 
 
 This fork targets a Linux x64 desktop build and preserves the VS Code MIT license and dependency notices. It uses no third-party Ruby IDE engine. The Rust scanner is std-only; the Ruby debugger uses TracePoint/Socket/JSON; project test reporters integrate the installed Minitest or RSpec framework.
 
-Build with `scripts/build-ruby-studio.sh`. Node24.15.0 and the private Rust toolchain are discovered beside this checkout. Existing node_modules dependencies must be installed first using the upstream native build prerequisites. The product package is written beside the checkout to `VSCode-linux-x64`; its binary is `ruby-studio`.
+Build with `scripts/build-ruby-studio.sh`; add `--setup --check --package` for dependency installation, validation and a downloadable archive. See [BUILDING_RUBY_STUDIO.md](BUILDING_RUBY_STUDIO.md) for clean-machine prerequisites and the GitHub Actions workflow. Node24.15.0 and the private Rust toolchain are discovered beside this checkout. Existing node_modules dependencies must be installed first using the upstream native build prerequisites. The product package is written beside the checkout to `VSCode-linux-x64`; its binary is `ruby-studio`.
 
 After building, set `RUBY_STUDIO_RUBY` to the selected Ruby executable and run `scripts/test-ruby-studio.sh`. The script checks compilation before tests, runs worker/model/runtime tests and then launches a disposable real extension-host integration workspace. It preserves the production user profile.
 
 Workspace-level run configurations use `.ruby-studio/run-configurations.json`. Users can select a Ruby SDK in the status bar. Project execution is gated on workspace trust. Built-in support is available without installing an extension pack.
 
 Current boundaries include general dynamic Ruby analysis/refactoring, full formatting, advanced Rails DSL intelligence, remote/container SDKs, non-SQLite databases and multi-thread/process or conditional-breakpoint debugging. The language status command reports analysis boundaries; native tests and research evidence are retained in the companion workspace.
+
+## Configuration windows
+
+The SDK toolbar/status button opens **Ruby SDK and Gems** in a separate native window. Choose or browse an interpreter, validate its actual Ruby version, and inspect its installed gems. Selection remains a draft until Apply or OK; failed validation leaves the window open and the saved SDK unchanged.
+
+**Settings** (Ctrl+Alt+S or the toolbar gear) opens the same searchable category window. User, workspace and project scopes are explicit. Ruby indentation is saved under `[ruby]`, so it affects Ruby editors consistently. Apply saves without closing; OK saves and closes; Cancel discards changes made since the last Apply. Escape clears search first. **All Editor Settings** opens the full inherited editor settings in a separate native window.
+
+**Edit Run/Debug Configurations** opens a separate form with add/duplicate/remove, name/type/script/cwd, JSON argument arrays/environment and Bundler controls. Apply validates before saving `.ruby-studio/run-configurations.json` and updates the selected configuration. Invalid JSON and externally changed configuration documents remain unsaved.
+
+These windows use the fork's native auxiliary editor-window mechanism. They reproduce selected configuration behaviors from static RubyMine evidence; they are modeless native windows, rather than RubyMine's IDE-modal JVM dialogs. Complete settings and RubyMine feature parity are not claimed.

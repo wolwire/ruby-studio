@@ -31,5 +31,8 @@
 	"command.runSelected": "Run Selected Configuration",
 	"command.debugSelected": "Debug Selected Configuration",
 	"command.rebuildIndex": "Rebuild Ruby Index",
-	"command.languageStatus": "Show Ruby Language Index Status"
+	"command.languageStatus": "Show Ruby Language Index Status",
+	"command.openSettings": "Settings",
+	"command.openInterpreterSettings": "Ruby SDK and Gems",
+	"command.editRunConfigurations": "Edit Run/Debug Configurations"
 }

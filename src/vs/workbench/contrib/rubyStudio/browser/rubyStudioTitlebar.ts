@@ -109,6 +109,8 @@ export class RubyStudioTitlebarViewItem extends BaseActionViewItem {
 		this.createControl(execution, 'rubyStudio.stop', localize('rubyStudio.stop', "Stop"), Codicon.debugStop, 'stop');
 		this.createControl(container, 'rubyStudio.railsConsole', localize('rubyStudio.railsConsole', "Rails Console"), Codicon.terminal, 'console', false, true);
 		this.interpreterControl = this.createControl(container, 'rubyStudio.selectInterpreter', localize('rubyStudio.selectInterpreter', "Select Ruby SDK"), Codicon.ruby, 'interpreter', true);
+		this.createControl(container, 'rubyStudio.editRunConfigurations', localize('rubyStudio.editConfigurations', "Edit Run/Debug Configurations"), Codicon.settings, 'run-settings');
+		this.createControl(container, 'rubyStudio.openSettings', localize('rubyStudio.openSettings', "Settings"), Codicon.gear, 'settings');
 
 		this._register(addDisposableListener(container, EventType.KEY_DOWN, event => this.onKeyDown(event)));
 		this._register(addDisposableListener(container, EventType.KEY_UP, event => {

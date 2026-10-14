@@ -1,0 +1,150 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License. See License.txt in the project root.
+name: Ruby Studio Desktop
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ruby-studio-desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            runner: ubuntu-24.04
+            arch: x64
+          - target: win32-x64
+            runner: windows-2022
+            arch: x64
+          - target: darwin-arm64
+            runner: macos-15
+            arch: arm64
+          - target: darwin-x64
+            runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      CI: true
+      VSCODE_ARCH: ${{ matrix.arch }}
+      npm_config_arch: ${{ matrix.arch }}
+      RUBY_STUDIO_USE_LOCAL_TOOLCHAIN: '0'
+      RUBY_STUDIO_LOG_DIR: ${{ github.workspace }}/.build/ruby-studio/logs/ci
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Upstream LFS objects are Copilot simulation caches; this desktop
+          # build neither ships nor tests them. They are absent on the fork.
+          lfs: false
+
+      - name: Set up the checkout's Node.js version
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            build/package-lock.json
+            remote/package-lock.json
+            extensions/package-lock.json
+
+      - name: Set up Ruby for real execution tests
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          ruby-version: '3.3'
+
+      - name: Install Linux prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config python3 python-is-python3 \
+            libx11-dev libx11-xcb-dev libxkbfile-dev libkrb5-dev libsecret-1-dev \
+            libgtk-3-0 libgbm1 libnss3 libasound2t64 libxss1 xvfb xauth
+          # Ubuntu 24.04 restricts Chromium's namespace sandbox by default.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Configure Windows native toolchain
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -version '[17.0,18.0)' -property installationPath
+          if (-not $vs) { throw 'Visual Studio 2022 C++ build tools are required.' }
+          "vs2022_install=$vs" >> $env:GITHUB_ENV
+          $sdk = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory |
+            Where-Object { Test-Path (Join-Path $_.FullName 'x64\signtool.exe') } |
+            Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $sdk) { throw 'Windows SDK signtool.exe is required by the upstream packaging task.' }
+          (Join-Path $sdk.FullName 'x64') >> $env:GITHUB_PATH
+          git config --global core.longpaths true
+
+      - name: Configure macOS native toolchain
+        if: runner.os == 'macOS'
+        run: |
+          xcode-select -print-path
+          c++ --version
+          python3 -m pip install --break-system-packages setuptools
+
+      - name: Verify host architecture and install test gems
+        shell: bash
+        run: |
+          node -e 'if (process.arch !== process.env.VSCODE_ARCH) throw new Error("Runner/Node architecture mismatch")'
+          rustup show active-toolchain
+          cargo --version
+          gem install minitest -v 5.25.5 --no-document
+          gem install rspec -v 3.13.2 --no-document
+
+      - name: Install locked dependencies and the Linux compiler
+        if: runner.os == 'Linux'
+        run: node scripts/ruby-studio.mjs setup --ci-toolchain
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Install locked Windows/macOS dependencies
+        if: runner.os != 'Linux'
+        run: node scripts/ruby-studio.mjs setup
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Type-check and build Ruby Studio with its Rust worker
+        run: node scripts/ruby-studio.mjs build
+
+      - name: Run unit, Rust, lexer parity and real desktop integration tests
+        run: node scripts/ruby-studio.mjs test
+
+      - name: Archive the tested app and create SHA-256 checksums
+        run: node scripts/ruby-studio.mjs package
+
+      - name: Upload tested native distribution
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ruby-studio-${{ matrix.target }}-${{ github.sha }}
+          path: dist/ruby-studio/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload build and test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ruby-studio-logs-${{ matrix.target }}-${{ github.sha }}
+          path: .build/ruby-studio/logs/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
