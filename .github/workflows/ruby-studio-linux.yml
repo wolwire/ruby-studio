@@ -31,7 +31,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          lfs: true
+          # Upstream LFS objects are Copilot simulation caches; this desktop
+          # build neither ships nor tests them. They are absent on the fork.
+          lfs: false
 
       - name: Set up the checkout's Node.js version
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
