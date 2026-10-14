@@ -203,6 +203,21 @@
 				"command": "rubyStudio.cancelTests",
 				"title": "Stop Ruby Tests",
 				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.openSettings",
+				"title": "%command.openSettings%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.openInterpreterSettings",
+				"title": "%command.openInterpreterSettings%",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.editRunConfigurations",
+				"title": "%command.editRunConfigurations%",
+				"category": "Ruby Studio"
 			}
 		],
 		"viewsContainers": {
@@ -396,6 +411,10 @@
 				"key": "ctrl+enter",
 				"command": "rubyStudio.sendRequest",
 				"when": "editorLangId == http"
+			},
+			{
+				"key": "ctrl+alt+s",
+				"command": "rubyStudio.openSettings"
 			}
 		],
 		"menus": {
@@ -436,6 +455,13 @@
 					"command": "rubyStudio.openDatabase",
 					"when": "view == rubyStudio.database",
 					"group": "navigation"
+				}
+			],
+			"menubar/preferencesMenu": [
+				{
+					"command": "rubyStudio.openSettings",
+					"group": "1_settings",
+					"order": 0
 				}
 			]
 		},

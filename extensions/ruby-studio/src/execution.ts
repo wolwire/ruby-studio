@@ -128,7 +128,7 @@ export function registerExecution(_context: vscode.ExtensionContext, runtime: Ru
 			const edit = { label: api.l10n.t('Edit Run Configurations…'), description: '.ruby-studio/run-configurations.json' };
 			const selected = await api.window.showQuickPick([...configurations.map(item => ({ label: item.name, description: item.type })), edit], { title: api.l10n.t('Ruby Run Configuration') });
 			if (!selected) { return undefined; }
-			if (selected === edit) { await api.window.showTextDocument(uri); return undefined; }
+			if (selected === edit) { await api.commands.executeCommand('rubyStudio.editRunConfigurations'); return undefined; }
 			configuration = configurations.find(item => item.name === selected.label);
 		}
 		if (!configuration) { return undefined; }

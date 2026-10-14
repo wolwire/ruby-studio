@@ -13,10 +13,11 @@ import { registerRails } from './rails';
 import { registerDependencies } from './dependencies';
 import { registerHttp } from './http';
 import { registerDatabase } from './database';
+import { registerSettings } from './settings';
 
 /** Activates the original Ruby tooling that is bundled with the application. */
 export function activate(context: vscode.ExtensionContext): void {
 	const runtime = new RuntimeService(context);
 	context.subscriptions.push(runtime, vscode.commands.registerCommand('rubyStudio.selectInterpreter', () => runtime.select()));
-	context.subscriptions.push(...registerDebugging(context, runtime), ...registerExecution(context, runtime), ...registerLanguage(context, runtime), ...registerTesting(context, runtime), ...registerRails(context, runtime), ...registerDependencies(context, runtime), ...registerHttp(), ...registerDatabase(context));
+	context.subscriptions.push(...registerSettings(context, runtime), ...registerDebugging(context, runtime), ...registerExecution(context, runtime), ...registerLanguage(context, runtime), ...registerTesting(context, runtime), ...registerRails(context, runtime), ...registerDependencies(context, runtime), ...registerHttp(), ...registerDatabase(context));
 }

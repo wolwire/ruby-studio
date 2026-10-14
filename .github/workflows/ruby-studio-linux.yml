@@ -1,0 +1,96 @@
+# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT License. See License.txt in the project root.
+name: Ruby Studio Linux x64
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ruby-studio-linux-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CI: true
+      VSCODE_ARCH: x64
+      npm_config_arch: x64
+      RUBY_STUDIO_USE_LOCAL_TOOLCHAIN: '0'
+      RUBY_STUDIO_LOG_DIR: ${{ github.workspace }}/.build/ruby-studio/logs/ci
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - name: Check out the fork
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          lfs: true
+
+      - name: Set up the checkout's Node.js version
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            build/package-lock.json
+            remote/package-lock.json
+            extensions/package-lock.json
+
+      - name: Set up Ruby for real execution tests
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          ruby-version: '3.3'
+
+      - name: Install Linux and test prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config python3 python-is-python3 \
+            libx11-dev libx11-xcb-dev libxkbfile-dev libkrb5-dev libsecret-1-dev \
+            libgtk-3-0 libgbm1 libnss3 libasound2t64 libxss1 xvfb xauth
+          # Ubuntu 24.04 restricts Chromium's namespace sandbox by default.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          rustup show active-toolchain
+          cargo --version
+          gem install minitest -v 5.25.5 --no-document
+          gem install rspec -v 3.13.2 --no-document
+
+      - name: Install locked dependencies and the upstream native compiler
+        run: ./scripts/setup-ruby-studio.sh --ci-toolchain
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Type-check and build Ruby Studio with its Rust worker
+        run: ./scripts/build-ruby-studio.sh
+
+      - name: Run unit, Rust, lexer parity and real desktop integration tests
+        run: ./scripts/test-ruby-studio.sh
+
+      - name: Archive the tested app and create SHA-256 checksums
+        run: ./scripts/build-ruby-studio.sh --package-only
+
+      - name: Upload Linux x64 distribution
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ruby-studio-linux-x64-${{ github.sha }}
+          path: dist/ruby-studio/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload build and test logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ruby-studio-logs-${{ github.sha }}
+          path: .build/ruby-studio/logs/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14

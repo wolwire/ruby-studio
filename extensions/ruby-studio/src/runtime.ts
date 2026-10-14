@@ -191,15 +191,7 @@ export class RuntimeService implements vscode.Disposable {
 
 	async select(): Promise<void> {
 		const api: typeof vscode = require('vscode');
-		const folder = await this.folder();
-		if (!folder) { await api.window.showInformationMessage(api.l10n.t('Open a project folder before selecting its Ruby interpreter.')); return; }
-		const current = api.workspace.getConfiguration('rubyStudio', folder.uri).get<string>('interpreterPath', '');
-		const selected = await api.window.showInputBox({ title: api.l10n.t('Ruby Interpreter for {0}', folder.name), prompt: api.l10n.t('Enter a Ruby executable path, or leave blank for project version managers and automatic detection.'), value: current });
-		if (selected === undefined) { return; }
-		if (api.workspace.isTrusted && selected.trim()) { await resolveRuntime({ cwd: folder.uri.fsPath, configuredPath: selected, trusted: true }); }
-		await api.workspace.getConfiguration('rubyStudio', folder.uri).update('interpreterPath', selected.trim(), api.ConfigurationTarget.WorkspaceFolder);
-		this.cache.clear();
-		if (api.workspace.isTrusted) { await this.get(folder); }
+		await api.commands.executeCommand('rubyStudio.openInterpreterSettings');
 	}
 
 	async terminal(name: string, args: string[], folder?: vscode.WorkspaceFolder): Promise<vscode.Terminal> {
