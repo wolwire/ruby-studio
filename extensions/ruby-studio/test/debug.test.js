@@ -116,6 +116,27 @@ test('untrusted debug launch never starts a Ruby process', async () => {
 	await assert.rejects(RubyDebugBridge.launch({ runtime: sdk, bridgePath, script: path.join(directory, 'does-not-exist.rb'), trusted: false }), /Trust/);
 });
 
+test('breakpoints through a directory symlink stop in the canonical loaded file', async () => {
+	const real = path.join(directory, 'real project');
+	const alias = path.join(directory, 'linked project');
+	await fs.mkdir(real);
+	await fs.symlink(real, alias, process.platform === 'win32' ? 'junction' : 'dir');
+	const script = path.join(alias, 'main.rb');
+	await fs.writeFile(script, 'value = 21\nputs value * 2\n');
+	const bridge = await RubyDebugBridge.launch({ runtime: sdk, bridgePath, script, trusted: true });
+	const recorded = record(bridge);
+	try {
+		await bridge.request('setBreakpoints', { path: script, lines: [2] });
+		await bridge.request('start');
+		assert.equal((await recorded.next('stopped')).body.reason, 'breakpoint');
+		const stack = await bridge.request('stackTrace');
+		assert.equal(await fs.realpath(stack.stackFrames[0].source.path), await fs.realpath(script));
+		await bridge.request('continue');
+		await recorded.next('exit');
+		assert.equal(recorded.output().trim(), '42');
+	} finally { bridge.dispose(); }
+});
+
 test('stop also terminates child processes in the owned Linux process group', { skip: process.platform !== 'linux' }, async () => {
 	const script = path.join(directory, 'with child.rb');
 	await fs.writeFile(script, 'child = fork { loop { sleep 0.1 } }\nSTDOUT.write("child=#{child}\\n")\nloop { sleep 0.1 }\n');
