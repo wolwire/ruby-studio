@@ -8,7 +8,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
-const { spawn } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 const assert = require('node:assert/strict');
 const source = path.resolve(__dirname, '../../..');
 const app = process.env.RUBY_STUDIO_APP || path.resolve(source, '../VSCode-linux-x64/ruby-studio');
@@ -72,9 +72,16 @@ async function until(fn, label, milliseconds = 20000) { const end = Date.now() +
 			await frame.getByLabel('Arguments (JSON Array)', { exact: true }).fill('not json'); await frame.getByRole('button', { name: 'OK', exact: true }).click(); await frame.locator('#status.error').waitFor(); assert.equal(page.isClosed(), false); assert.deepEqual(JSON.parse(await fs.readFile(runFile, 'utf8')).configurations[0].args, saved.args); await frame.getByRole('button', { name: 'Cancel', exact: true }).click(); await until(() => page.isClosed(), 'Run window cancel');
 		});
 		reports.success = true;
-	} catch (error) { reports.success = false; reports.error = error.stack; console.error(error); process.exitCode = 1; }
+	} catch (error) {
+		reports.success = false; reports.error = error.stack; console.error(error); process.exitCode = 1;
+		if (browser) {
+			reports.windows = await Promise.all(browser.contexts()[0].pages().map(async page => ({ url: page.url(), frames: await Promise.all(page.frames().map(async frame => ({ url: frame.url(), html: await frame.content().catch(error => String(error)) }))) })));
+		}
+	}
 	finally {
-		reports.finishedAt = new Date().toISOString(); if (browser) { await browser.close(); } child.kill('SIGTERM'); await Promise.race([new Promise(resolve => child.once('exit', resolve)), wait(3000)]); if (child.exitCode === null) { child.kill('SIGKILL'); }
-		const destination = process.env.RUBY_STUDIO_SETTINGS_RESULT || path.join(os.tmpdir(), 'ruby-studio-settings-result.json'); await fs.writeFile(destination, JSON.stringify(reports, null, 2) + '\n'); if (process.env.RUBY_STUDIO_SETTINGS_LOG) { await fs.writeFile(process.env.RUBY_STUDIO_SETTINGS_LOG, logs); } await fs.rm(directory, { recursive: true, force: true }); console.log(JSON.stringify(reports));
+		reports.finishedAt = new Date().toISOString(); if (browser) { await browser.close(); }
+		if (process.platform === 'win32' && child.exitCode === null) { try { execFileSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* Already exited. */ } }
+		else { child.kill('SIGTERM'); await Promise.race([new Promise(resolve => child.once('exit', resolve)), wait(3000)]); if (child.exitCode === null) { child.kill('SIGKILL'); } }
+		const destination = process.env.RUBY_STUDIO_SETTINGS_RESULT || path.join(os.tmpdir(), 'ruby-studio-settings-result.json'); await fs.writeFile(destination, JSON.stringify(reports, null, 2) + '\n'); if (process.env.RUBY_STUDIO_SETTINGS_LOG) { await fs.writeFile(process.env.RUBY_STUDIO_SETTINGS_LOG, logs); await fs.cp(path.join(directory, 'profile/logs'), path.join(path.dirname(destination), 'settings-electron-logs'), { recursive: true }).catch(() => {}); } await fs.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); console.log(JSON.stringify({ ...reports, windows: undefined }));
 	}
 })();

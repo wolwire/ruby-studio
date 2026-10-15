@@ -103,6 +103,7 @@ async function main() {
 		if (rustHost !== expected) { throw new Error(`Use the matching native Rust toolchain: expected ${expected}, found ${rustHost}.`); }
 		await run('build-native', 'cargo', ['build', '--release', '--locked', '--manifest-path', 'extensions/ruby-studio/native/Cargo.toml']);
 		const built = path.resolve(source, process.env.CARGO_TARGET_DIR || 'extensions/ruby-studio/native/target', 'release', host.worker);
+		if (host.platform === 'darwin') { await run('sign-native', '/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', built]); }
 		process.env.RUBY_STUDIO_NATIVE_LEXER = built;
 		const destination = path.join(source, 'extensions/ruby-studio/native/bin', host.id, host.worker);
 		fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.copyFileSync(built, destination); fs.chmodSync(destination, 0o755);
@@ -155,8 +156,19 @@ async function main() {
 		await artifact('metadata', metadata);
 		fs.rmSync(archive, { force: true });
 		if (host.platform === 'darwin') {
+			await node('verify-macos-signature', ['scripts/sign-ruby-studio-macos.mjs', 'verify', app]);
 			// ditto preserves framework symlinks, executable modes and bundle metadata.
 			await run('archive', 'ditto', ['-c', '-k', '--sequesterRsrc', '--keepParent', layout.bundle, archive]);
+			const extracted = fs.mkdtempSync(path.join(os.tmpdir(), 'ruby-studio-archive-'));
+			try {
+				await run('extract-archive', 'ditto', ['-x', '-k', archive, extracted]);
+				await node('verify-extracted-signature', ['scripts/sign-ruby-studio-macos.mjs', 'verify', extracted]);
+				// Run the same real desktop tests against what users extract, with a
+				// fresh profile rather than the unarchived build output.
+				process.env.RUBY_STUDIO_APP_DIR = extracted;
+				process.env.RUBY_STUDIO_LOG_DIR = path.join(log, 'extracted-archive');
+				await node('test-extracted-archive', ['scripts/ruby-studio.mjs', 'test', '--integration-only']);
+			} finally { fs.rmSync(extracted, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); }
 		} else {
 			await run('archive', '7z', ['a', '-tzip', archive, '.'], app);
 		}
@@ -172,6 +184,7 @@ async function main() {
 		for (const task of ['copy-codicons', 'compile-non-native-extensions-build', 'compile-extension-media-build']) { await npmRun(task, ['run', 'gulp', task]); }
 		await node('bundle-desktop', ['build/next/index.ts', 'bundle', '--out', 'out-vscode', '--nls', '--target', 'desktop']);
 		await npmRun('package-desktop', ['run', 'gulp', `vscode-${host.id}-ci`]);
+		if (host.platform === 'darwin') { await node('sign-macos', ['scripts/sign-ruby-studio-macos.mjs', 'sign', app]); }
 		await artifact('verify'); await artifact('record-build');
 		if (has('--check')) { await test(); }
 	}
