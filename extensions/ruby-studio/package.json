@@ -218,6 +218,12 @@
 				"command": "rubyStudio.editRunConfigurations",
 				"title": "%command.editRunConfigurations%",
 				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.installRuby",
+				"title": "%command.installRuby%",
+				"category": "Ruby Studio",
+				"icon": "$(cloud-download)"
 			}
 		],
 		"viewsContainers": {
@@ -455,6 +461,11 @@
 					"command": "rubyStudio.openDatabase",
 					"when": "view == rubyStudio.database",
 					"group": "navigation"
+				},
+				{
+					"command": "rubyStudio.installRuby",
+					"when": "view == rubyStudio.gems",
+					"group": "navigation@1"
 				}
 			],
 			"menubar/preferencesMenu": [

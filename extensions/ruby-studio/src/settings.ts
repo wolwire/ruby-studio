@@ -13,27 +13,30 @@ import { randomBytes, createHash } from 'node:crypto';
 import { RuntimeService, resolveRuntime, findExecutable } from './runtime';
 import { parseRunConfigurations, RubyRunConfiguration } from './execution';
 import { settingFields, SettingValue, validateSettingsDraft } from './settingsModel';
+import { RubyInstaller } from './rubyInstaller';
 
 const execute = promisify(execFile);
 type Scope = 'user' | 'workspace' | 'project';
 interface SettingsMessage {
-	command: 'ready' | 'scope' | 'apply' | 'cancel' | 'browse' | 'validate' | 'gems' | 'allSettings' | 'runConfigurations';
-	scope?: Scope; draft?: Record<string, SettingValue>; interpreter?: string; close?: boolean; configurations?: RubyRunConfiguration[]; selected?: string;
+	command: 'ready' | 'scope' | 'apply' | 'cancel' | 'browse' | 'validate' | 'gems' | 'allSettings' | 'runConfigurations' | 'rubyVersions' | 'installRuby' | 'stopInstall';
+	version?: string; scope?: Scope; draft?: Record<string, SettingValue>; interpreter?: string; close?: boolean; configurations?: RubyRunConfiguration[]; selected?: string;
 }
 
 /** Dedicated native editor windows keep configuration and project ownership in the original workbench. */
 export function registerSettings(context: vscode.ExtensionContext, runtime: RuntimeService): vscode.Disposable[] {
 	const panels = new Map<string, vscode.WebviewPanel>();
+	const installer = new RubyInstaller(path.join(os.homedir(), '.ruby-studio', 'sdk'), process.env, (message, ...args) => vscode.l10n.t(message, ...args));
 	const disposables: vscode.Disposable[] = [{ dispose: () => { for (const panel of panels.values()) { panel.dispose(); } panels.clear(); } }];
-	const open = async (mode: 'settings' | 'runs', section = 'appearance') => {
+	const open = async (mode: 'settings' | 'runs', section = 'appearance', installRequested = false) => {
 		const folder = await runtime.folder();
 		const key = `${mode}:${folder?.uri.toString() || 'user'}`;
 		const existing = panels.get(key);
-		if (existing) { existing.reveal(); await existing.webview.postMessage({ command: 'section', section }); return; }
+		if (existing) { existing.reveal(); await existing.webview.postMessage({ command: 'section', section, installRequested }); return; }
 		const panel = vscode.window.createWebviewPanel(`rubyStudio.${mode}`, mode === 'runs' ? vscode.l10n.t('Run/Debug Configurations') : vscode.l10n.t('Ruby Studio Settings'), vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media')] });
 		panels.set(key, panel);
 		let scope: Scope = folder ? 'project' : 'user';
 		let busy = false;
+		let installation: AbortController | undefined;
 		let disposed = false;
 		let revision = 0;
 		let original: Record<string, SettingValue | undefined> = {};
@@ -62,11 +65,12 @@ export function registerSettings(context: vscode.ExtensionContext, runtime: Runt
 			let configurations: RubyRunConfiguration[] = [];
 			if (mode === 'runs') { const text = await readRuns(); runHash = createHash('sha256').update(text).digest('hex'); configurations = text ? parseRunConfigurations(text) : []; }
 			const candidates = new Set([String(values['rubyStudio.interpreterPath'] || ''), process.env.RUBY_STUDIO_RUBY || '', await findExecutable('ruby', process.env, cwd) || '']);
-			for (const directory of [path.join(os.homedir(), '.rbenv/versions'), path.join(os.homedir(), '.asdf/installs/ruby'), path.join(os.homedir(), '.rubies')]) {
-				try { for (const name of (await fs.readdir(directory)).slice(0, 50)) { const candidate = path.join(directory, name, 'bin/ruby'); try { await fs.access(candidate, fs.constants.X_OK); candidates.add(candidate); } catch { /* Not an interpreter. */ } } } catch { /* Optional version manager. */ }
+			for (const directory of [path.join(os.homedir(), '.rbenv/versions'), path.join(os.homedir(), '.asdf/installs/ruby'), path.join(os.homedir(), '.rubies'), installer.rubies]) {
+				try { for (const name of (await fs.readdir(directory)).slice(0, 50)) { const candidate = path.join(directory, name, 'bin', process.platform === 'win32' ? 'ruby.exe' : 'ruby'); try { await fs.access(candidate, fs.constants.X_OK); candidates.add(candidate); } catch { /* Not an interpreter. */ } } } catch { /* Optional version manager. */ }
 			}
-			const labels = Object.fromEntries(['Settings', 'Appearance', 'Editor', 'Ruby SDK and Gems', 'Ruby Language', 'Run/Debug Configurations', 'User', 'Workspace', 'Project', 'Search Settings', 'Apply', 'OK', 'Cancel', 'Browse', 'Validate', 'Refresh Gems', 'Automatic Detection', 'All Editor Settings', 'Use Inherited Value', 'Add', 'Duplicate', 'Remove', 'Name', 'Type', 'Script', 'Arguments (JSON Array)', 'Environment (JSON Object)', 'Working Directory', 'Use Bundler', 'Select Configuration', 'No Project Open', 'Unsaved Changes', 'Saved', 'Validation Failed', 'Local Ruby Interpreter', 'Interpreter Version and Gems'].map(label => [label, vscode.l10n.t(label)]));
-			await post({ command: 'state', mode, section, scope, scopes: folder ? ['project', 'workspace', 'user'] : ['user'], project: folder?.name, revision: preserveRevision ? (revision ||= 1) : ++revision, fields: settingFields.map(field => ({ ...field, label: vscode.l10n.t(field.label) })), values, inherited: Object.fromEntries(settingFields.map(field => [field.key, inherited(field.key)])), explicit: original, candidates: [...candidates].filter(Boolean), configurations, selected: vscode.workspace.getConfiguration('rubyStudio', folder?.uri).get<string>('runConfiguration', ''), labels });
+			const labels = Object.fromEntries(['Settings', 'Appearance', 'Editor', 'Ruby SDK and Gems', 'Ruby Language', 'Run/Debug Configurations', 'User', 'Workspace', 'Project', 'Search Settings', 'Apply', 'OK', 'Cancel', 'Browse', 'Validate', 'Refresh Gems', 'Automatic Detection', 'All Editor Settings', 'Use Inherited Value', 'Add', 'Duplicate', 'Remove', 'Name', 'Type', 'Script', 'Arguments (JSON Array)', 'Environment (JSON Object)', 'Working Directory', 'Use Bundler', 'Select Configuration', 'No Project Open', 'Unsaved Changes', 'Saved', 'Validation Failed', 'Local Ruby Interpreter', 'Interpreter Version and Gems', 'Install Ruby', 'Ruby Version', 'Refresh Versions', 'Stop Installation', 'Installation Log', 'Installation Progress', 'Installing Ruby', 'Loading Ruby Versions', 'Ruby Installed — Click Apply to Use It', 'Install a Ruby version for this computer. Downloads are verified and stored in Ruby Studio’s user storage.', 'Installation downloads and files are kept when you Cancel settings. The selected SDK changes only after Apply or OK.'].map(label => [label, vscode.l10n.t(label)]));
+			await post({ command: 'state', canInstallRuby: ['linux', 'darwin', 'win32'].includes(process.platform), installRequested, installerHelp: process.platform === 'win32' ? vscode.l10n.t('Windows uses official portable Ruby packages. Native gems may also need the RubyInstaller Development Kit.') : vscode.l10n.t('Ruby is built for this computer. A C compiler, make, and OpenSSL, libyaml, libffi and zlib development libraries are required. On macOS, install Xcode Command Line Tools and the OpenSSL and libyaml libraries first.'), mode, section, scope, scopes: folder ? ['project', 'workspace', 'user'] : ['user'], project: folder?.name, revision: preserveRevision ? (revision ||= 1) : ++revision, fields: settingFields.map(field => ({ ...field, label: vscode.l10n.t(field.label) })), values, inherited: Object.fromEntries(settingFields.map(field => [field.key, inherited(field.key)])), explicit: original, candidates: [...candidates].filter(Boolean), configurations, selected: vscode.workspace.getConfiguration('rubyStudio', folder?.uri).get<string>('runConfiguration', ''), labels });
+			installRequested = false;
 		};
 		const handle = async (message: SettingsMessage) => {
 			if (!message || typeof message.command !== 'string' || busy) { return; }
@@ -89,6 +93,21 @@ export function registerSettings(context: vscode.ExtensionContext, runtime: Runt
 							gems = JSON.parse(result.stdout);
 						}
 						await post({ command: 'validated', version: sdk.version, ruby: sdk.ruby, manager: sdk.manager, gems }); break;
+					}
+					case 'rubyVersions': case 'installRuby': {
+						installation = new AbortController();
+						await post({ command: 'installStarted', listing: message.command === 'rubyVersions' });
+						const operation = { trusted: vscode.workspace.isTrusted, signal: installation.signal, onOutput: (text: string) => { void post({ command: 'installOutput', text }); } };
+						try {
+							if (message.command === 'rubyVersions') {
+								await post({ command: 'rubyVersions', versions: await installer.versions(operation) });
+							} else {
+								if (typeof message.version !== 'string') { throw new Error(vscode.l10n.t('Select a complete stable Ruby version.')); }
+								const sdk = await installer.install(message.version, operation);
+								if (!operation.signal.aborted) { await post({ command: 'rubyInstalled', value: sdk.ruby, version: sdk.version }); }
+							}
+						} finally { installation = undefined; await post({ command: 'installFinished' }); }
+						break;
 					}
 					case 'apply': {
 						if (mode === 'runs') {
@@ -118,8 +137,12 @@ export function registerSettings(context: vscode.ExtensionContext, runtime: Runt
 			finally { busy = false; await post({ command: 'idle' }); }
 		};
 		let queue = Promise.resolve();
-		listeners.push(panel.webview.onDidReceiveMessage((message: SettingsMessage) => { queue = queue.then(() => handle(message)); }));
-		listeners.push(panel.onDidDispose(() => { disposed = true; panels.delete(key); listeners.splice(0).forEach(listener => listener.dispose()); }));
+		listeners.push(panel.webview.onDidReceiveMessage((message: SettingsMessage) => {
+			// Stop must bypass the operation queue while downloading or compiling Ruby.
+			if (message?.command === 'stopInstall') { installation?.abort(); return; }
+			queue = queue.then(() => handle(message));
+		}));
+		listeners.push(panel.onDidDispose(() => { disposed = true; installation?.abort(); panels.delete(key); listeners.splice(0).forEach(listener => listener.dispose()); }));
 		const nonce = randomBytes(16).toString('hex');
 		const script = panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'settings.js'));
 		const styles = panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'settings.css'));
@@ -137,6 +160,6 @@ export function registerSettings(context: vscode.ExtensionContext, runtime: Runt
 		// after ownership transfers so startup content/messages cannot be lost.
 		if (!disposed) { panel.webview.html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource}; script-src 'nonce-${nonce}'"><link rel="stylesheet" href="${styles}"></head><body><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`; }
 	};
-	disposables.push(vscode.commands.registerCommand('rubyStudio.openSettings', () => open('settings')), vscode.commands.registerCommand('rubyStudio.openInterpreterSettings', () => open('settings', 'sdk')), vscode.commands.registerCommand('rubyStudio.editRunConfigurations', () => open('runs')));
+	disposables.push(vscode.commands.registerCommand('rubyStudio.installRuby', () => open('settings', 'sdk', true)), vscode.commands.registerCommand('rubyStudio.openSettings', () => open('settings')), vscode.commands.registerCommand('rubyStudio.openInterpreterSettings', () => open('settings', 'sdk')), vscode.commands.registerCommand('rubyStudio.editRunConfigurations', () => open('runs')));
 	return disposables;
 }
