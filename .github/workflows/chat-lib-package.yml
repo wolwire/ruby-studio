@@ -19,7 +19,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # sqlite3 uses node-gyp 10, which supports Visual Studio 2022.
+        os: [ubuntu-latest, macos-latest, windows-2022]
 
     steps:
       - name: Checkout
