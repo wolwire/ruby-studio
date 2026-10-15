@@ -134,6 +134,8 @@ After the workflow is committed and pushed to the fork, open its **Actions → R
 
 For a fast Windows UI investigation, manually dispatch **Ruby Studio Desktop** with `diagnostic_build_run_id` set to a run containing a tested Windows distribution. This mode verifies that existing archive's checksums/provenance and repeats the native extension-host suite followed by settings/run windows with five fresh profiles. It uploads renderer, frame, service-worker and timing diagnostics without rebuilding or producing release distributions. Leave the input empty for the normal four-platform build. Diagnostic runs cannot be promoted by the publisher because they do not contain the required four distribution artifacts. The `desktop-test` CLI command runs this same native sequence against `RUBY_STUDIO_APP_DIR`; Windows/macOS reuse the prebuilt app without compilation, while Linux retains the normal compiled integration path.
 
+`diagnostic_use_current_webview` overlays the checkout's two raw webview bootstrap assets onto that disposable Windows extraction, after verifying the original archive. The job logs both the archive commit and overlay commit. This isolates bootstrap changes during investigation; the modified app is never uploaded as a distribution. Normal builds still compile and test the complete app from one commit.
+
 ## Publish a GitHub Release manually
 
 The **Ruby Studio Publish** workflow promotes the exact packages from a completed **Ruby Studio Desktop** build. It does not rebuild them. The selected run must succeed for all four platforms, come from this repository through a push or manual build, and still have its distribution artifacts available. If the 14-day artifacts have expired, run a new desktop build first.

@@ -11,6 +11,11 @@ on:
         description: Optional existing Windows artifact run ID for desktop diagnostics only
         required: false
         type: string
+      diagnostic_use_current_webview:
+        description: Test current webview bootstrap assets in the existing Windows package (diagnostics only)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -185,6 +190,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DIAGNOSTIC_BUILD_RUN_ID: ${{ inputs.diagnostic_build_run_id }}
+          DIAGNOSTIC_USE_CURRENT_WEBVIEW: ${{ inputs.diagnostic_use_current_webview }}
         shell: pwsh
         run: |
           if ($env:DIAGNOSTIC_BUILD_RUN_ID -notmatch '^\d+$') { throw 'A numeric build run ID is required.' }
@@ -214,6 +220,12 @@ jobs:
           if (@($executable).Count -ne 1) { throw 'Expected one extracted Ruby Studio executable.' }
           $env:RUBY_STUDIO_APP = $executable.FullName
           $env:RUBY_STUDIO_APP_DIR = $executable.DirectoryName
+          if ($env:DIAGNOSTIC_USE_CURRENT_WEBVIEW -eq 'true') {
+            $bootstrap = Join-Path $executable.DirectoryName 'resources/app/out/vs/workbench/contrib/webview/browser/pre'
+            Copy-Item src/vs/workbench/contrib/webview/browser/pre/index.html $bootstrap/index.html
+            Copy-Item src/vs/workbench/contrib/webview/browser/pre/service-worker.js $bootstrap/service-worker.js
+            Write-Output "Diagnostic-only bootstrap overlay: archive $($run.head_sha), source $env:GITHUB_SHA"
+          }
           $env:RUBY_STUDIO_RUBY = ruby -rrbconfig -e 'print RbConfig.ruby'
           gem install minitest -v 5.25.5 --no-document
           if ($LASTEXITCODE -ne 0) { throw 'Could not install Minitest.' }

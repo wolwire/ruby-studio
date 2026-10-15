@@ -109,7 +109,7 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 		}
 	});
 
-	private readonly _expectedServiceWorkerVersion = 5; // Keep this in sync with the version in service-worker.js
+	private readonly _expectedServiceWorkerVersion = 6; // Keep this in sync with the version in service-worker.js
 
 	private _element: HTMLIFrameElement | undefined;
 	protected get element(): HTMLIFrameElement | undefined { return this._element; }

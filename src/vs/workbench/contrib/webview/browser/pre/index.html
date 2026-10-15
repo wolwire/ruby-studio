@@ -255,8 +255,8 @@
 			const swPath = encodeURI(`service-worker.js?v=${expectedWorkerVersion}&vscode-resource-base-authority=${searchParams.get('vscode-resource-base-authority')}&remoteAuthority=${searchParams.get('remoteAuthority') ?? ''}`);
 			navigator.serviceWorker.register(swPath, { type: 'module', updateViaCache: 'none' })
 				.then(async registration => {
-					if (navigator.serviceWorker.controller) {
-						// A previous SW is already controlling. Force an update
+					if (registration.active || navigator.serviceWorker.controller) {
+						// A previous SW may be active without controlling this page. Force an update
 						// check so we don't serve stale resources after a VS Code
 						// update. register() resolves before the update check
 						// completes, so we must call update() explicitly to wait
@@ -264,17 +264,31 @@
 						registration = await registration.update();
 					}
 
-					// If a new worker was found, wait for it to take control via skipWaiting() + clients.claim() in the SW.
-					if (
-						// New worker
-						registration.installing || registration.waiting
-						// First ever load
-						|| !navigator.serviceWorker.controller
-					) {
-						await new Promise(r => {
-							navigator.serviceWorker.addEventListener('controllerchange', r, { once: true });
-						});
-					}
+					const worker = registration.installing || registration.waiting || registration.active;
+					if (!worker) { throw new Error('No registered service worker is available.'); }
+					await new Promise((r, rejectControl) => {
+						let claimRequested = false;
+						const finish = (/** @type {Error | undefined} */ error) => {
+							navigator.serviceWorker.removeEventListener('controllerchange', checkControl);
+							worker.removeEventListener('statechange', checkControl);
+							if (error) { rejectControl(error); } else { r(undefined); }
+						};
+						const checkControl = () => {
+							if (worker.state === 'redundant') { finish(new Error('The service worker could not activate.')); return; }
+							if (worker.state !== 'activated') { return; }
+							if (navigator.serviceWorker.controller === worker) { finish(undefined); return; }
+							// A detached window can navigate before activation, then miss
+							// the activation-time claim. Request control for this new client.
+							if (!claimRequested) {
+								claimRequested = true;
+								try { worker.postMessage({ channel: 'claim-client' }); }
+								catch (error) { finish(error instanceof Error ? error : new Error(String(error))); }
+							}
+						};
+						navigator.serviceWorker.addEventListener('controllerchange', checkControl);
+						worker.addEventListener('statechange', checkControl);
+						checkControl();
+					});
 
 					return resolve();
 				}).catch(error => {
