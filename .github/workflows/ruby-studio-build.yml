@@ -139,7 +139,7 @@ jobs:
         run: node scripts/ruby-studio.mjs test
         env:
           RUBY_STUDIO_TEST_SDK_INSTALL: ${{ matrix.target == 'win32-x64' && '1' || '0' }}
-          GITHUB_TOKEN: ${{ github.token }}
+          SDK_INSTALL_GITHUB_TOKEN: ${{ github.token }}
 
       - name: Archive the tested app and create SHA-256 checksums
         run: node scripts/ruby-studio.mjs package

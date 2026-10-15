@@ -42,7 +42,7 @@ export function parseRubySourceCatalog(text: string): RubyDownload[] {
 	return result;
 }
 
-/** Windows packages are official portable RubyInstaller archives, selected by host architecture. */
+/** Windows packages are official per-user RubyInstaller packages, selected by host architecture. */
 export function parseRubyWindowsCatalog(text: string, arch: string, localize: (message: string) => string = message => message): RubyDownload[] {
 	const result: RubyDownload[] = [];
 	const architecture = arch === 'arm64' ? 'arm' : arch === 'x64' ? 'x64' : undefined;
@@ -55,8 +55,8 @@ export function parseRubyWindowsCatalog(text: string, arch: string, localize: (m
 		if (!match) { continue; }
 		for (const asset of release.assets || []) {
 			const root = `rubyinstaller-${match[1]}-${match[2]}-${architecture}`;
-			const url = `https://github.com/oneclick/rubyinstaller2/releases/download/${release.tag_name}/${root}.7z`;
-			if (asset.name !== `${root}.7z` || asset.browser_download_url !== url || !/^sha256:[a-f0-9]{64}$/.test(asset.digest || '')) { continue; }
+			const url = `https://github.com/oneclick/rubyinstaller2/releases/download/${release.tag_name}/${root}.exe`;
+			if (asset.name !== `${root}.exe` || asset.browser_download_url !== url || !/^sha256:[a-f0-9]{64}$/.test(asset.digest || '')) { continue; }
 			if (!result.some(item => item.version === match[1])) { result.push({ version: match[1], url, sha256: asset.digest!.slice(7), root }); }
 		}
 	}
@@ -208,16 +208,27 @@ export class RubyInstaller {
 			}
 			await fs.writeFile(path.join(destination, '.ruby-studio-installing.json'), JSON.stringify({ version, pid: process.pid }));
 			temporary = await fs.mkdtemp(path.join(this.storage, 'ruby-download-'));
-			const archive = path.join(temporary, process.platform === 'win32' ? 'ruby.7z' : 'ruby.tar.gz');
+			const archive = path.join(temporary, process.platform === 'win32' ? 'ruby-setup.exe' : 'ruby.tar.gz');
 			await this.download(release, archive, operation);
-			const tar = await findExecutable(process.platform === 'win32' ? path.join(this.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar', this.env, this.storage);
-			if (!tar) { throw new Error(this.localize('Archive extraction tools are unavailable. Install the system tar command.')); }
-			validateRubyArchive(await this.run(tar, ['-tf', archive], operation, temporary), release.root, this.localize);
-			await this.run(tar, ['-xf', archive, '-C', temporary], operation, temporary);
-			const source = path.join(temporary, release.root);
 			if (process.platform === 'win32') {
-				await fs.cp(source, destination, { recursive: true, errorOnExist: true, force: false });
+				// Official switches keep installation per-user and leave the system
+				// PATH, file associations, global Ruby and MSYS2 selection untouched.
+				const log = path.join(temporary, 'ruby-setup.log');
+				operation.onOutput(this.localize('Installing Ruby {0} for this user…', version) + '\n');
+				try {
+					await this.run(archive, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', '/NORESTART', '/CURRENTUSER', '/NOICONS', `/DIR=${destination}`, '/TASKS=noassocfiles,nomodpath,noridkinstall', `/LOG=${log}`], operation, temporary, 10 * 60 * 1000);
+				} catch (error) {
+					let details = '';
+					try { const bytes = await fs.readFile(log); details = bytes.toString(bytes[0] === 255 && bytes[1] === 254 ? 'utf16le' : 'utf8').slice(-8000); } catch { /* Setup did not create a log. */ }
+					if (details) { operation.onOutput(details); }
+					throw error;
+				}
 			} else {
+				const tar = await findExecutable('tar', this.env, this.storage);
+				if (!tar) { throw new Error(this.localize('Archive extraction tools are unavailable. Install the system tar command.')); }
+				validateRubyArchive(await this.run(tar, ['-tf', archive], operation, temporary), release.root, this.localize);
+				await this.run(tar, ['-xf', archive, '-C', temporary], operation, temporary);
+				const source = path.join(temporary, release.root);
 				const make = await findExecutable('make', this.env, this.storage); const compiler = await findExecutable('cc', this.env, this.storage);
 				if (!make || !compiler) { throw new Error(this.localize('Install a C compiler and make before building Ruby. On macOS, install Xcode Command Line Tools.')); }
 				const configure = [`--prefix=${destination}`, '--disable-install-doc', '--disable-yjit'];
@@ -239,7 +250,16 @@ export class RubyInstaller {
 			await fs.writeFile(path.join(destination, '.ruby-studio-sdk.json'), JSON.stringify({ version, platform: process.platform, arch: process.arch, url: release.url, sha256: release.sha256 }) + '\n');
 			return sdk;
 		} catch (error) {
-			if (owned) { await fs.rm(destination, { recursive: true, force: true, maxRetries: 3, retryDelay: 300 }); }
+			if (owned) {
+				if (process.platform === 'win32') {
+					const uninstaller = path.join(destination, 'unins000.exe');
+					try {
+						await fs.access(uninstaller);
+						await this.run(uninstaller, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], { ...operation, signal: AbortSignal.timeout(30000) }, this.storage, 30000);
+					} catch { /* Remove only the partial files we created if setup rollback is unavailable. */ }
+				}
+				await fs.rm(destination, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+			}
 			this.check(operation); throw error;
 		} finally { try { if (temporary) { await fs.rm(temporary, { recursive: true, force: true, maxRetries: 3, retryDelay: 300 }); } } finally { await unlock(); } }
 	}

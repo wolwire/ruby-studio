@@ -55,8 +55,8 @@ test('source catalog requires official release paths and SHA-256 checksums', () 
 	for (const invalid of [row.replace('https:', 'http:'), row.replace('cache.ruby-lang.org', 'untrusted.example'), row.replace(hash, 'not-a-hash'), row.replaceAll('3.3.8', '3.3.8-preview1'), row.replaceAll('3.3.8', '../../escape')]) { assert.deepEqual(parseRubySourceCatalog(invalid), []); }
 });
 
-test('Windows catalog selects matching official portable archives with published digests', () => {
-	const hash = 'b'.repeat(64); const release = { tag_name: 'RubyInstaller-3.3.8-1', assets: ['x64', 'arm', 'x86'].map(arch => ({ name: `rubyinstaller-3.3.8-1-${arch}.7z`, digest: 'sha256:' + hash, browser_download_url: `https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.3.8-1/rubyinstaller-3.3.8-1-${arch}.7z` })) };
+test('Windows catalog selects matching official per-user packages with published digests', () => {
+	const hash = 'b'.repeat(64); const release = { tag_name: 'RubyInstaller-3.3.8-1', assets: ['x64', 'arm', 'x86'].map(arch => ({ name: `rubyinstaller-3.3.8-1-${arch}.exe`, digest: 'sha256:' + hash, browser_download_url: `https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.3.8-1/rubyinstaller-3.3.8-1-${arch}.exe` })) };
 	assert.equal(parseRubyWindowsCatalog(JSON.stringify([release]), 'x64')[0].root, 'rubyinstaller-3.3.8-1-x64');
 	assert.equal(parseRubyWindowsCatalog(JSON.stringify([release]), 'arm64')[0].root, 'rubyinstaller-3.3.8-1-arm');
 	for (const changes of [{ prerelease: true }, { draft: true }, { assets: release.assets.map(asset => ({ ...asset, digest: undefined })) }, { assets: release.assets.map(asset => ({ ...asset, browser_download_url: 'https://untrusted.example/archive.7z' })) }]) { assert.deepEqual(parseRubyWindowsCatalog(JSON.stringify([{ ...release, ...changes }]), 'x64'), []); }
@@ -141,11 +141,11 @@ test('a different Ruby version in an existing SDK is rejected without overwritin
 	assert.equal(await fs.readFile(path.join(destination, 'bin/ruby'), 'utf8'), f.actual);
 });
 
-// One real Windows SDK installation catches archive layout, DLL and extractor
-// compatibility that a synthetic fixture cannot establish. Enabled in native CI.
-test('official Windows portable SDK downloads, extracts and validates its core libraries', { skip: process.platform !== 'win32' || process.env.RUBY_STUDIO_TEST_SDK_INSTALL !== '1', timeout: 180000 }, async t => {
+// One real Windows SDK installation catches setup, layout and DLL compatibility
+// that a synthetic fixture cannot establish. Enabled in native CI.
+test('official Windows SDK installs per-user and validates its core libraries', { skip: process.platform !== 'win32' || process.env.RUBY_STUDIO_TEST_SDK_INSTALL !== '1', timeout: 180000 }, async t => {
 	const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ruby-studio-sdk-real-')); t.after(() => fs.rm(directory, { recursive: true, force: true }));
-	const request = (url, options = {}) => fetch(url, { ...options, headers: { ...options.headers, ...(String(url).startsWith('https://api.github.com/') && process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) } });
+	const request = (url, options = {}) => fetch(url, { ...options, headers: { ...options.headers, ...(String(url).startsWith('https://api.github.com/') && process.env.SDK_INSTALL_GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.SDK_INSTALL_GITHUB_TOKEN}` } : {}) } });
 	const installer = new RubyInstaller(directory, process.env, undefined, request);
 	const operation = { trusted: true, signal: AbortSignal.timeout(150000), onOutput: () => {} };
 	const versions = await installer.versions(operation); assert.ok(versions.includes('3.3.12'));
