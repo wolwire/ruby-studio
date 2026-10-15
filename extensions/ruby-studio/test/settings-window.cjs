@@ -98,7 +98,7 @@ async function until(fn, label, milliseconds = 20000) { const end = Date.now() +
 	} catch (error) {
 		reports.success = false; reports.error = error.stack; console.error(error); process.exitCode = 1;
 		if (browser) {
-			reports.windows = await Promise.all(browser.contexts()[0].pages().map(async page => ({ url: page.url(), frames: await Promise.all(page.frames().map(async frame => ({ url: frame.url(), html: await frame.content().catch(error => String(error)) }))) })));
+			reports.windows = await Promise.all(browser.contexts()[0].pages().map(async page => ({ url: page.url(), frames: await Promise.all(page.frames().map(async frame => ({ url: frame.url(), html: await frame.content().catch(error => String(error)), diagnostics: await frame.evaluate(async () => ({ marks: performance.getEntriesByType('mark').map(mark => ({ name: mark.name, startTime: mark.startTime })), serviceWorker: navigator.serviceWorker ? { controller: navigator.serviceWorker.controller?.state, registrations: await Promise.race([navigator.serviceWorker.getRegistrations().then(items => items.map(item => ({ scope: item.scope, installing: item.installing?.state, waiting: item.waiting?.state, active: item.active?.state }))), new Promise(resolve => setTimeout(() => resolve('timed out'), 2000))]) } : null })).catch(error => String(error)) }))) })));
 		}
 	}
 	finally {

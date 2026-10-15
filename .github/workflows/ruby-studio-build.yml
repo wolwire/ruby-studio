@@ -6,16 +6,22 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      diagnostic_build_run_id:
+        description: Optional existing Windows artifact run ID for desktop diagnostics only
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: ruby-studio-desktop-${{ github.event.pull_request.number || github.ref }}
+  group: ruby-studio-desktop-${{ github.event.pull_request.number || github.ref }}-${{ inputs.diagnostic_build_run_id && 'diagnostic' || 'build' }}
   cancel-in-progress: true
 
 jobs:
   build-test-package:
+    if: ${{ !inputs.diagnostic_build_run_id }}
     name: ${{ matrix.target }}
     strategy:
       fail-fast: false
@@ -147,6 +153,78 @@ jobs:
         with:
           name: ruby-studio-logs-${{ matrix.target }}-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: .build/ruby-studio/logs/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 14
+
+  windows-diagnostics:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.diagnostic_build_run_id }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Check out desktop tests
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          lfs: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Set up the interpreter
+        uses: ruby/setup-ruby@14594264cd68ce8a2345dd349bc3d138a4ef85c8 # v1.327.0
+        with:
+          ruby-version: '3.3'
+
+      - name: Inspect an existing desktop package with fresh profiles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DIAGNOSTIC_BUILD_RUN_ID: ${{ inputs.diagnostic_build_run_id }}
+        shell: pwsh
+        run: |
+          if ($env:DIAGNOSTIC_BUILD_RUN_ID -notmatch '^\d+$') { throw 'A numeric build run ID is required.' }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:DIAGNOSTIC_BUILD_RUN_ID" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.head_repository.full_name -ne $env:GITHUB_REPOSITORY -or $run.event -notin @('push', 'workflow_dispatch') -or $run.head_sha -notmatch '^[a-f0-9]{40}$') { throw 'Use a desktop build from this repository.' }
+          $artifact = "ruby-studio-win32-x64-$($run.head_sha)"
+          gh run download $env:DIAGNOSTIC_BUILD_RUN_ID --repo $env:GITHUB_REPOSITORY --name $artifact --dir .build/desktop-diagnostics/download
+          if ($LASTEXITCODE -ne 0) { throw 'No tested Windows distribution is available.' }
+          Get-Content .build/desktop-diagnostics/download/SHA256SUMS | ForEach-Object {
+            if ($_ -notmatch '^([a-f0-9]{64})  ([^/\\]+)$') { throw 'Invalid distribution checksum manifest.' }
+            $expected = $Matches[1]
+            $file = Join-Path .build/desktop-diagnostics/download $Matches[2]
+            if ((Get-FileHash $file -Algorithm SHA256).Hash.ToLower() -ne $expected) { throw 'Distribution checksum mismatch.' }
+          }
+          $info = Get-Content .build/desktop-diagnostics/download/*.build-info.json | ConvertFrom-Json
+          if ($info.sourceCommit -ne $run.head_sha -or $info.platform -ne 'win32-x64' -or $info.workingTreeDirty -ne $false) { throw 'Distribution provenance does not match the selected run.' }
+          $archive = Get-ChildItem .build/desktop-diagnostics/download/*.zip
+          if (@($archive).Count -ne 1) { throw 'Expected one Windows app ZIP.' }
+          7z x $archive.FullName '-o.build/desktop-diagnostics/app' -y
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract the desktop package.' }
+          $playwright = node -p "require('./package-lock.json').packages['node_modules/playwright-core'].version"
+          npm install --prefix .build/desktop-diagnostics/tools --ignore-scripts --no-audit --no-fund "playwright-core@$playwright"
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install the pinned desktop test driver.' }
+          $env:NODE_PATH = "$env:GITHUB_WORKSPACE/.build/desktop-diagnostics/tools/node_modules"
+          $env:RUBY_STUDIO_APP = "$env:GITHUB_WORKSPACE/.build/desktop-diagnostics/app/Ruby Studio.exe"
+          $env:RUBY_STUDIO_RUBY = ruby -rrbconfig -e 'print RbConfig.ruby'
+          New-Item -ItemType Directory -Force .build/ruby-studio/diagnostics | Out-Null
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            $env:RUBY_STUDIO_SETTINGS_RESULT = "$env:GITHUB_WORKSPACE/.build/ruby-studio/diagnostics/windows-$attempt.json"
+            $env:RUBY_STUDIO_SETTINGS_LOG = "$env:GITHUB_WORKSPACE/.build/ruby-studio/diagnostics/windows-$attempt.log"
+            node extensions/ruby-studio/test/settings-window.cjs
+            if ($LASTEXITCODE -ne 0) { throw "Desktop diagnostics failed on fresh profile $attempt. Inspect the uploaded logs." }
+          }
+
+      - name: Upload desktop diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ruby-studio-windows-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .build/ruby-studio/diagnostics/
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 14
