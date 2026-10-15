@@ -79,7 +79,17 @@ async function main() {
 		// the custom V8 headers required by Electron's native modules.
 		if (host.platform === 'win32') { await node('setup-electron-headers', ['build/npm/preinstall.ts']); }
 		process.env.VSCODE_FORCE_INSTALL = '1';
-		await npmRun('setup-workspace', ['ci', '--no-audit', '--no-fund']);
+		for (let attempt = 1; attempt <= 3; attempt++) {
+			try { await npmRun('setup-workspace', ['ci', '--no-audit', '--no-fund']); break; }
+			catch (error) {
+				const output = fs.readFileSync(path.join(log, 'setup-workspace.log'), 'utf8');
+				// The upstream Windows installer also retries npm. Restrict this to
+				// the observed native fast-fail; do not mask dependency/compiler errors.
+				if (host.platform !== 'win32' || attempt === 3 || !/Process exited with code:\s*(?:3221226505|-1073740791|0xc0000409)/i.test(output)) { throw error; }
+				fs.copyFileSync(path.join(log, 'setup-workspace.log'), path.join(log, `setup-workspace-attempt-${attempt}.log`));
+				console.warn(`Windows npm subprocess exited with native error 0xC0000409. Retrying locked installation (${attempt + 1}/3); previous output retained.`);
+			}
+		}
 	}
 	async function compile() {
 		await npmRun('typecheck-core', ['run', 'compile-check-ts-native']);

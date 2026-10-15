@@ -134,6 +134,8 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ruby-studio-${{ matrix.target }}-${{ github.sha }}
+          # A rerun replaces only this platform's fully tested distribution.
+          overwrite: true
           path: dist/ruby-studio/
           if-no-files-found: error
           compression-level: 0
@@ -143,7 +145,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ruby-studio-logs-${{ matrix.target }}-${{ github.sha }}
+          name: ruby-studio-logs-${{ matrix.target }}-${{ github.sha }}-attempt-${{ github.run_attempt }}
           path: .build/ruby-studio/logs/
           include-hidden-files: true
           if-no-files-found: warn
