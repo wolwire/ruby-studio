@@ -35,6 +35,12 @@ async function until(fn, label, milliseconds = 20000) { const end = Date.now() +
 		const popup = async () => until(() => context.pages().find(page => page !== main && !page.isClosed()), 'Dedicated native window');
 		const readSettings = async () => { try { return JSON.parse(await fs.readFile(settingsFile, 'utf8')); } catch (error) { if (error.code === 'ENOENT') { return {}; } throw error; } };
 		const openSdk = async () => { await main.bringToFront(); await main.locator('[data-command="rubyStudio.selectInterpreter"]').click(); const page = await popup(); return { page, frame: await frameFor(page) }; };
+		const openRuns = async () => {
+			await main.bringToFront();
+			if (await main.locator('[data-command="rubyStudio.editRunConfigurations"]').count()) { await main.locator('[data-command="rubyStudio.editRunConfigurations"]').click(); }
+			else { await main.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P'); await main.locator('.quick-input-widget input').fill('Ruby Studio: Edit Run/Debug Configurations'); await main.locator('.quick-input-widget .monaco-list-row').filter({ hasText: 'Edit Run/Debug Configurations' }).first().waitFor(); await main.keyboard.press('Enter'); }
+			const page = await popup(); return { page, frame: await frameFor(page) };
+		};
 		let page, frame;
 		await check('Interpreter opens a separate native window and preserves the source editor', async () => {
 			({ page, frame } = await openSdk()); assert.equal(context.pages().length, 2); await frame.getByLabel('Ruby Executable', { exact: true }).waitFor(); assert.ok((await main.locator('body').innerText()).includes('main.rb'));
@@ -64,12 +70,18 @@ async function until(fn, label, milliseconds = 20000) { const end = Date.now() +
 			await frame.getByRole('button', { name: 'Cancel', exact: true }).click(); await until(() => page.isClosed(), 'Scope window close');
 		});
 		await check('Run configuration window validates and saves executable argument arrays', async () => {
-			await main.bringToFront();
-			if (await main.locator('[data-command="rubyStudio.editRunConfigurations"]').count()) { await main.locator('[data-command="rubyStudio.editRunConfigurations"]').click(); }
-			else { await main.keyboard.press(process.platform === 'darwin' ? 'Meta+Shift+P' : 'Control+Shift+P'); await main.locator('.quick-input-widget input').fill('Ruby Studio: Edit Run/Debug Configurations'); await main.locator('.quick-input-widget .monaco-list-row').filter({ hasText: 'Edit Run/Debug Configurations' }).first().waitFor(); await main.keyboard.press('Enter'); } page = await popup(); frame = await frameFor(page); await frame.getByRole('button', { name: 'Add', exact: true }).click();
+			({ page, frame } = await openRuns()); await frame.getByRole('button', { name: 'Add', exact: true }).click();
 			await frame.getByLabel('Name', { exact: true }).fill('Native Run'); await frame.getByLabel('Arguments (JSON Array)', { exact: true }).fill('["argument with spaces", "literal$"]'); await frame.getByLabel('Environment (JSON Object)', { exact: true }).fill('{"MARKER":"settings"}'); await frame.getByRole('button', { name: 'Apply', exact: true }).click();
 			await until(async () => { try { return JSON.parse(await fs.readFile(runFile, 'utf8')).configurations.length === 1; } catch { return false; } }, 'Run configuration save'); const saved = JSON.parse(await fs.readFile(runFile, 'utf8')).configurations[0]; assert.deepEqual(saved.args, ['argument with spaces', 'literal$']); assert.equal(saved.env.MARKER, 'settings'); await until(async () => (await readSettings())['rubyStudio.runConfiguration'] === 'Native Run', 'Selected run configuration');
 			await frame.getByLabel('Arguments (JSON Array)', { exact: true }).fill('not json'); await frame.getByRole('button', { name: 'OK', exact: true }).click(); await frame.locator('#status.error').waitFor(); assert.equal(page.isClosed(), false); assert.deepEqual(JSON.parse(await fs.readFile(runFile, 'utf8')).configurations[0].args, saved.args); await frame.getByRole('button', { name: 'Cancel', exact: true }).click(); await until(() => page.isClosed(), 'Run window cancel');
+		});
+		await check('Repeated interpreter and run-window transfers keep their webviews loaded', async () => {
+			for (let attempt = 0; attempt < 3; attempt++) {
+				for (const open of [openSdk, openRuns]) {
+					({ page, frame } = await open()); assert.equal(context.pages().length, 2);
+					await frame.getByRole('button', { name: 'Cancel', exact: true }).click(); await until(() => page.isClosed(), 'Repeated dialog close');
+				}
+			}
 		});
 		reports.success = true;
 	} catch (error) {
