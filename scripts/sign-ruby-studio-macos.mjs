@@ -29,7 +29,7 @@ try {
 	codesign(['--verify', '--deep', '--strict', '--verbose=2', layout.bundle]);
 	codesign(['--verify', '--strict', '--verbose=2', worker]);
 	for (const executable of [layout.executable, worker]) {
-		execFileSync('/usr/bin/lipo', ['-verify_arch', host.arch === 'arm64' ? 'arm64' : 'x86_64', executable], { stdio: 'inherit' });
+		execFileSync('/usr/bin/lipo', [executable, '-verify_arch', host.arch === 'arm64' ? 'arm64' : 'x86_64'], { stdio: 'inherit' });
 	}
 	console.log(`Verified ad-hoc macOS bundle and ${host.arch} native worker: ${layout.bundle}`);
 } catch (error) { console.error(error); process.exitCode = 1; }

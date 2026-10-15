@@ -168,6 +168,15 @@ async function main() {
 				process.env.RUBY_STUDIO_APP_DIR = extracted;
 				process.env.RUBY_STUDIO_LOG_DIR = path.join(log, 'extracted-archive');
 				await node('test-extracted-archive', ['scripts/ruby-studio.mjs', 'test', '--integration-only']);
+				// Prove that verification rejects a modified bundle, using only the
+				// disposable extraction after its launch tests have finished.
+				const extractedLayout = readApp(extracted);
+				fs.appendFileSync(path.join(extractedLayout.bundle, 'Contents/Info.plist'), '\n');
+				try {
+					execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', extractedLayout.bundle], { stdio: 'pipe' });
+					throw new Error('Signature verification accepted a modified bundle.');
+				} catch (error) { if (!Number.isInteger(error.status) || error.status === 0) { throw error; } }
+				console.log('Signature regression check rejected the modified disposable bundle.');
 			} finally { fs.rmSync(extracted, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 }); }
 		} else {
 			await run('archive', '7z', ['a', '-tzip', archive, '.'], app);
