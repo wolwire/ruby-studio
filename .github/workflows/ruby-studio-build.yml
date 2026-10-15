@@ -213,12 +213,16 @@ jobs:
           $executable = Get-ChildItem .build/desktop-diagnostics/app -Filter 'Ruby Studio.exe' -File -Recurse
           if (@($executable).Count -ne 1) { throw 'Expected one extracted Ruby Studio executable.' }
           $env:RUBY_STUDIO_APP = $executable.FullName
+          $env:RUBY_STUDIO_APP_DIR = $executable.DirectoryName
           $env:RUBY_STUDIO_RUBY = ruby -rrbconfig -e 'print RbConfig.ruby'
+          gem install minitest -v 5.25.5 --no-document
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install Minitest.' }
+          gem install rspec -v 3.13.2 --no-document
+          if ($LASTEXITCODE -ne 0) { throw 'Could not install RSpec.' }
           New-Item -ItemType Directory -Force .build/ruby-studio/diagnostics | Out-Null
           for ($attempt = 1; $attempt -le 5; $attempt++) {
-            $env:RUBY_STUDIO_SETTINGS_RESULT = "$env:GITHUB_WORKSPACE/.build/ruby-studio/diagnostics/windows-$attempt.json"
-            $env:RUBY_STUDIO_SETTINGS_LOG = "$env:GITHUB_WORKSPACE/.build/ruby-studio/diagnostics/windows-$attempt.log"
-            node extensions/ruby-studio/test/settings-window.cjs
+            $env:RUBY_STUDIO_LOG_DIR = "$env:GITHUB_WORKSPACE/.build/ruby-studio/diagnostics/attempt-$attempt"
+            node scripts/ruby-studio.mjs desktop-test
             if ($LASTEXITCODE -ne 0) { throw "Desktop diagnostics failed on fresh profile $attempt. Inspect the uploaded logs." }
           }
 

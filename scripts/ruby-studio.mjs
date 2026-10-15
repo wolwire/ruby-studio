@@ -14,14 +14,14 @@ import { target, readApp } from './lib/ruby-studio-platform.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const [command, ...options] = process.argv.slice(2);
-const allowed = { setup: ['--ci-toolchain'], build: ['--setup', '--ci-toolchain', '--check', '--package', '--package-only'], test: ['--unit-only', '--integration-only'], package: [] };
+const allowed = { setup: ['--ci-toolchain'], build: ['--setup', '--ci-toolchain', '--check', '--package', '--package-only'], test: ['--unit-only', '--integration-only'], 'desktop-test': [], package: [] };
 const has = option => options.includes(option);
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const git = args => execFileSync('git', args, { cwd: source, encoding: 'utf8' }).trim();
 
 async function main() {
 	if (!command || command === '--help') {
-		console.log('Usage: node scripts/ruby-studio.mjs setup|build|test|package [options]\nBuild: --setup --check --package; Linux setup: --ci-toolchain\nTest: --unit-only or --integration-only; archive an existing app: package\nNative hosts: Linux x64, Windows x64, macOS x64/arm64. See BUILDING_RUBY_STUDIO.md.');
+		console.log('Usage: node scripts/ruby-studio.mjs setup|build|test|desktop-test|package [options]\nBuild: --setup --check --package; Linux setup: --ci-toolchain\nTest: --unit-only or --integration-only; desktop-test checks a prebuilt app (Linux also compiles); archive an existing app: package\nNative hosts: Linux x64, Windows x64, macOS x64/arm64. See BUILDING_RUBY_STUDIO.md.');
 		return;
 	}
 	if (!allowed[command] || options.some(option => !allowed[command].includes(option))) { throw new Error('Invalid command or option. Use --help.'); }
@@ -33,8 +33,8 @@ async function main() {
 		if (process.env[name] && process.env[name] !== host.arch) { throw new Error(`${name} must match the native Node architecture (${host.arch}).`); }
 	}
 	if (host.platform === 'linux') {
-		const scripts = { setup: 'setup', build: 'build', test: 'test', package: 'package' };
-		const child = spawn('bash', [path.join(source, `scripts/${scripts[command]}-ruby-studio.sh`), ...options], { stdio: 'inherit', cwd: source });
+		const scripts = { setup: 'setup', build: 'build', test: 'test', 'desktop-test': 'test', package: 'package' };
+		const child = spawn('bash', [path.join(source, `scripts/${scripts[command]}-ruby-studio.sh`), ...(command === 'desktop-test' ? ['--integration-only'] : options)], { stdio: 'inherit', cwd: source });
 		await new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(new Error(`Linux ${command} failed (${code}).`))); });
 		return;
 	}
@@ -108,11 +108,14 @@ async function main() {
 		const destination = path.join(source, 'extensions/ruby-studio/native/bin', host.id, host.worker);
 		fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.copyFileSync(built, destination); fs.chmodSync(destination, 0o755);
 	}
-	async function test() {
+	async function rubyPrerequisites() {
 		const ruby = process.env.RUBY_STUDIO_TEST_RUBY || process.env.RUBY_STUDIO_RUBY || 'ruby';
 		const rubyPath = execFileSync(ruby, ['-rrbconfig', '-e', 'print RbConfig.ruby'], { encoding: 'utf8' }).trim();
 		Object.assign(process.env, { RUBY_STUDIO_TEST_RUBY: rubyPath, RUBY_STUDIO_RUBY: rubyPath });
 		await run('test-ruby-prerequisites', rubyPath, ['-rjson', '-ropenssl', '-rrubygems', '-rminitest', '-rrspec/core', '-e', 'abort "Ruby 3.1 or newer is required" if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.1"); puts RUBY_DESCRIPTION']);
+	}
+	async function test() {
+		await rubyPrerequisites();
 		await compile(); await native();
 		if (!has('--integration-only')) {
 			await run('check-native', 'cargo', ['check', '--locked', '--manifest-path', 'extensions/ruby-studio/native/Cargo.toml']);
@@ -121,6 +124,9 @@ async function main() {
 			await node('test-unit', ['--test', '--test-reporter=tap', ...tests, 'extensions/ruby-studio/native/tests/parity.test.js', ...fs.readdirSync(path.join(source, 'scripts/lib')).filter(file => file.startsWith('ruby-studio-') && file.endsWith('.test.mjs')).map(file => `scripts/lib/${file}`)]);
 		}
 		if (has('--unit-only')) { return; }
+		await desktop();
+	}
+	async function desktop() {
 		await artifact('verify');
 		const layout = readApp(app);
 		const qa = fs.mkdtempSync(path.join(os.tmpdir(), 'ruby-studio-check-'));
@@ -187,6 +193,7 @@ async function main() {
 	}
 	if (command === 'setup') { await setup(); }
 	if (command === 'test') { await test(); }
+	if (command === 'desktop-test') { await rubyPrerequisites(); await desktop(); }
 	if (command === 'build' && !has('--package-only')) {
 		if (has('--setup')) { await setup(); }
 		await compile(); await native();
