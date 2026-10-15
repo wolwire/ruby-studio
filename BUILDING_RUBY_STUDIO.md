@@ -132,9 +132,9 @@ The workflow uses read-only repository permissions and commit-pinned actions. Ac
 
 After the workflow is committed and pushed to the fork, open its **Actions → Ruby Studio Desktop** page to view results or use **Run workflow**. The scripts themselves do not push commits, publish releases or upload artifacts outside a workflow run.
 
-## Publish a GitHub Release manually
-
 For a fast Windows UI investigation, manually dispatch **Ruby Studio Desktop** with `diagnostic_build_run_id` set to a run containing a tested Windows distribution. This mode verifies that existing archive's checksums/provenance and exercises settings/run windows with five fresh profiles. It uploads renderer, frame, service-worker and timing diagnostics without rebuilding or producing release distributions. Leave the input empty for the normal four-platform build. Diagnostic runs cannot be promoted by the publisher because they do not contain the required four distribution artifacts.
+
+## Publish a GitHub Release manually
 
 The **Ruby Studio Publish** workflow promotes the exact packages from a completed **Ruby Studio Desktop** build. It does not rebuild them. The selected run must succeed for all four platforms, come from this repository through a push or manual build, and still have its distribution artifacts available. If the 14-day artifacts have expired, run a new desktop build first.
 

@@ -203,13 +203,16 @@ jobs:
           if ($info.sourceCommit -ne $run.head_sha -or $info.platform -ne 'win32-x64' -or $info.workingTreeDirty -ne $false) { throw 'Distribution provenance does not match the selected run.' }
           $archive = Get-ChildItem .build/desktop-diagnostics/download/*.zip
           if (@($archive).Count -ne 1) { throw 'Expected one Windows app ZIP.' }
-          7z x $archive.FullName '-o.build/desktop-diagnostics/app' -y
+          $sevenZip = (Get-Command 7z.exe -ErrorAction Stop).Source
+          & $sevenZip x $archive.FullName "-o$env:GITHUB_WORKSPACE\.build\desktop-diagnostics\app" -y
           if ($LASTEXITCODE -ne 0) { throw 'Could not extract the desktop package.' }
           $playwright = node -p "require('./package-lock.json').packages['node_modules/playwright-core'].version"
           npm install --prefix .build/desktop-diagnostics/tools --ignore-scripts --no-audit --no-fund "playwright-core@$playwright"
           if ($LASTEXITCODE -ne 0) { throw 'Could not install the pinned desktop test driver.' }
           $env:NODE_PATH = "$env:GITHUB_WORKSPACE/.build/desktop-diagnostics/tools/node_modules"
-          $env:RUBY_STUDIO_APP = "$env:GITHUB_WORKSPACE/.build/desktop-diagnostics/app/Ruby Studio.exe"
+          $executable = Get-ChildItem .build/desktop-diagnostics/app -Filter 'Ruby Studio.exe' -File -Recurse
+          if (@($executable).Count -ne 1) { throw 'Expected one extracted Ruby Studio executable.' }
+          $env:RUBY_STUDIO_APP = $executable.FullName
           $env:RUBY_STUDIO_RUBY = ruby -rrbconfig -e 'print RbConfig.ruby'
           New-Item -ItemType Directory -Force .build/ruby-studio/diagnostics | Out-Null
           for ($attempt = 1; $attempt -le 5; $attempt++) {
