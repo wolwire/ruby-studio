@@ -107,7 +107,7 @@ async function main() {
 			await run('check-native', 'cargo', ['check', '--locked', '--manifest-path', 'extensions/ruby-studio/native/Cargo.toml']);
 			await run('test-native', 'cargo', ['test', '--locked', '--manifest-path', 'extensions/ruby-studio/native/Cargo.toml']);
 			const tests = fs.readdirSync(path.join(source, 'extensions/ruby-studio/test')).filter(file => file.endsWith('.test.js')).map(file => `extensions/ruby-studio/test/${file}`);
-			await node('test-unit', ['--test', '--test-reporter=tap', ...tests, 'extensions/ruby-studio/native/tests/parity.test.js', 'scripts/lib/ruby-studio-platform.test.mjs']);
+			await node('test-unit', ['--test', '--test-reporter=tap', ...tests, 'extensions/ruby-studio/native/tests/parity.test.js', ...fs.readdirSync(path.join(source, 'scripts/lib')).filter(file => file.startsWith('ruby-studio-') && file.endsWith('.test.mjs')).map(file => `scripts/lib/${file}`)]);
 		}
 		if (has('--unit-only')) { return; }
 		await artifact('verify');

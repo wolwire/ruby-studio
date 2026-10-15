@@ -193,7 +193,7 @@ exports.run = async function run() {
 				const startDeadline = Date.now() + 20000;
 				let started = false;
 				while (Date.now() < startDeadline) {
-					try { started = await fs.readFile(startedMarker, 'utf8') === 'started\n'; }
+					try { started = (await fs.readFile(startedMarker, 'utf8')).replace(/\r\n/g, '\n') === 'started\n'; }
 					catch (error) { if (error.code !== 'ENOENT') { throw error; } }
 					if (started) { break; }
 					assert.equal(runState, 'pending', 'The run ended before entering the sleeping test.');

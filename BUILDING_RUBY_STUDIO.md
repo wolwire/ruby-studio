@@ -125,3 +125,31 @@ If Ruby is supplied by a version manager, activate that environment before runni
 The workflow uses read-only repository permissions and commit-pinned actions. Action versions were checked against their primary release documentation on 2026-10-14: [checkout 7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1), [setup-node 7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0), [upload-artifact 7.0.2](https://github.com/actions/upload-artifact/releases/tag/v7.0.2), and [setup-ruby 1.327.0](https://github.com/ruby/setup-ruby/releases/tag/v1.327.0). The [workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax) and [artifact action documentation](https://github.com/actions/upload-artifact) describe the triggers and upload behavior used here.
 
 After the workflow is committed and pushed to the fork, open its **Actions → Ruby Studio Desktop** page to view results or use **Run workflow**. The scripts themselves do not push commits, publish releases or upload artifacts outside a workflow run.
+
+## Publish a GitHub Release manually
+
+The **Ruby Studio Publish** workflow promotes the exact packages from a completed **Ruby Studio Desktop** build. It does not rebuild them. The selected run must succeed for all four platforms, come from this repository through a push or manual build, and still have its distribution artifacts available. If the 14-day artifacts have expired, run a new desktop build first.
+
+After this workflow is merged into the default branch:
+
+1. Open **Actions → Ruby Studio Publish → Run workflow**.
+2. Enter the successful desktop **build run ID** (the number at the end of its Actions run URL) and a new **tag**, such as `v0.1.0`.
+3. Choose **draft**, **prerelease**, **release** or **verify-only**, then run it. Draft is the default. Verify-only downloads and checks everything without creating a tag or release. Release publishes a stable release and marks it latest; prerelease publishes without marking it latest.
+
+The GitHub CLI equivalent is:
+
+```bash
+gh workflow run ruby-studio-publish.yml --ref ruby-studio \
+  -f build_run_id=YOUR_SUCCESSFUL_RUN_ID -f tag=v0.1.0 -f mode=draft
+```
+
+Publication uses the built-in `GITHUB_TOKEN` with Actions read and repository contents write permissions. No personal access token is needed. Inputs are passed as environment variables and quoted arguments. The publisher checks the source SHA, clean build receipts, app version agreement, all four platform artifacts, filenames and SHA-256 hashes before creating a release. It refuses existing tags/releases and never replaces assets or moves tags. PR/fork build artifacts are not eligible.
+
+Each release contains four platform archives, four `.build-info.json` files, a combined `SHA256SUMS`, and `release-manifest.json` recording the source commit and build evidence URL. A release tag labels this tested build; it does not rewrite the app's embedded upstream version. The publisher stages the upload in a draft, verifies uploaded asset sizes and available GitHub digests, and publishes as its final operation. If upload verification fails, inspect the remaining draft before retrying. Code signing and notarization are not added by publication.
+
+For a local read-only verification using an authenticated `gh` installation:
+
+```bash
+node scripts/publish-ruby-studio.mjs --repo wolwire/ruby-studio \
+  --run-id YOUR_SUCCESSFUL_RUN_ID --tag v0.1.0 --mode verify-only
+```
