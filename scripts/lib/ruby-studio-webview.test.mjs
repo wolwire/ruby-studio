@@ -6,9 +6,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { createHash } from 'node:crypto';
 
 const pre = new URL('../../src/vs/workbench/contrib/webview/browser/pre/', import.meta.url);
-const html = fs.readFileSync(new URL('index.html', pre), 'utf8');
+// HTML parsing normalizes CRLF/CR before CSP hashes are checked.
+const html = fs.readFileSync(new URL('index.html', pre), 'utf8').replace(/\r\n?/g, '\n');
 const start = html.indexOf('const workerReady =');
 const end = html.indexOf('const hostMessaging =', start);
 assert.ok(start > 0 && end > start);
@@ -79,4 +81,11 @@ test('the shipped service worker handles client claims and shares the host proto
 	vm.runInNewContext(code, { self, location, URL, Response, Request, Headers, ReadableStream, TransformStream, performance: { mark() {} }, setTimeout, clearTimeout, console });
 	await listeners.get('message')({ source: {}, data: { channel: 'claim-client' }, waitUntil(promise) { lifetime = promise; } });
 	await lifetime; assert.ok(lifetime instanceof Promise); assert.equal(claims, 1);
+});
+
+test('the webview security policy authorizes the shipped inline bootstrap', () => {
+	const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)];
+	assert.equal(scripts.length, 1);
+	const hash = createHash('sha256').update(scripts[0][1]).digest('base64');
+	assert.ok(html.includes("script-src 'sha256-" + hash + "'"), 'Update the CSP hash whenever the inline bootstrap changes.');
 });
