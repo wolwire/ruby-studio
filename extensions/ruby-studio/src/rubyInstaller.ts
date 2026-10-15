@@ -42,7 +42,7 @@ export function parseRubySourceCatalog(text: string): RubyDownload[] {
 	return result;
 }
 
-/** Windows packages are official per-user RubyInstaller packages, selected by host architecture. */
+/** Windows packages are official portable RubyInstaller packages, selected by host architecture. */
 export function parseRubyWindowsCatalog(text: string, arch: string, localize: (message: string) => string = message => message): RubyDownload[] {
 	const result: RubyDownload[] = [];
 	const architecture = arch === 'arm64' ? 'arm' : arch === 'x64' ? 'x64' : undefined;
@@ -55,8 +55,8 @@ export function parseRubyWindowsCatalog(text: string, arch: string, localize: (m
 		if (!match) { continue; }
 		for (const asset of release.assets || []) {
 			const root = `rubyinstaller-${match[1]}-${match[2]}-${architecture}`;
-			const url = `https://github.com/oneclick/rubyinstaller2/releases/download/${release.tag_name}/${root}.exe`;
-			if (asset.name !== `${root}.exe` || asset.browser_download_url !== url || !/^sha256:[a-f0-9]{64}$/.test(asset.digest || '')) { continue; }
+			const url = `https://github.com/oneclick/rubyinstaller2/releases/download/${release.tag_name}/${root}.7z`;
+			if (asset.name !== `${root}.7z` || asset.browser_download_url !== url || !/^sha256:[a-f0-9]{64}$/.test(asset.digest || '')) { continue; }
 			if (!result.some(item => item.version === match[1])) { result.push({ version: match[1], url, sha256: asset.digest!.slice(7), root }); }
 		}
 	}
@@ -208,21 +208,15 @@ export class RubyInstaller {
 			}
 			await fs.writeFile(path.join(destination, '.ruby-studio-installing.json'), JSON.stringify({ version, pid: process.pid }));
 			temporary = await fs.mkdtemp(path.join(this.storage, 'ruby-download-'));
-			const archive = path.join(temporary, process.platform === 'win32' ? 'ruby-setup.exe' : 'ruby.tar.gz');
+			const archive = path.join(temporary, process.platform === 'win32' ? 'ruby.7z' : 'ruby.tar.gz');
 			await this.download(release, archive, operation);
 			if (process.platform === 'win32') {
-				// Official switches keep installation per-user and leave the system
-				// PATH, file associations, global Ruby and MSYS2 selection untouched.
-				const log = path.join(temporary, 'ruby-setup.log');
-				operation.onOutput(this.localize('Installing Ruby {0} for this user…', version) + '\n');
-				try {
-					await this.run(archive, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/SP-', '/NORESTART', '/CURRENTUSER', '/NOICONS', `/DIR=${destination}`, '/TASKS=noassocfiles,nomodpath,noridkinstall', `/LOG=${log}`], operation, temporary, 10 * 60 * 1000);
-				} catch (error) {
-					let details = '';
-					try { const bytes = await fs.readFile(log); details = bytes.toString(bytes[0] === 255 && bytes[1] === 254 ? 'utf16le' : 'utf8').slice(-8000); } catch { /* Setup did not create a log. */ }
-					if (details) { operation.onOutput(details); }
-					throw error;
-				}
+				const worker = path.join(__dirname, '..', 'native', 'bin', `${process.platform}-${process.arch}`, 'ruby-studio-lexer.exe');
+				const extracted = path.join(temporary, 'extracted'); await fs.mkdir(extracted);
+				operation.onOutput(this.localize('Extracting Ruby {0}…', version) + '\n');
+				await this.run(worker, ['--extract-ruby-sdk', archive, extracted, release.root], operation, temporary, 10 * 60 * 1000);
+				const root = path.join(extracted, release.root);
+				for (const entry of await fs.readdir(root)) { await fs.rename(path.join(root, entry), path.join(destination, entry)); }
 			} else {
 				const tar = await findExecutable('tar', this.env, this.storage);
 				if (!tar) { throw new Error(this.localize('Archive extraction tools are unavailable. Install the system tar command.')); }
@@ -251,13 +245,6 @@ export class RubyInstaller {
 			return sdk;
 		} catch (error) {
 			if (owned) {
-				if (process.platform === 'win32') {
-					const uninstaller = path.join(destination, 'unins000.exe');
-					try {
-						await fs.access(uninstaller);
-						await this.run(uninstaller, ['/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'], { ...operation, signal: AbortSignal.timeout(30000) }, this.storage, 30000);
-					} catch { /* Remove only the partial files we created if setup rollback is unavailable. */ }
-				}
 				await fs.rm(destination, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
 			}
 			this.check(operation); throw error;

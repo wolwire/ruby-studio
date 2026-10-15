@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
+mod sdk_archive;
+
 use std::collections::VecDeque;
 use std::io::{self, BufRead, BufWriter, Read, Write};
 
@@ -620,6 +622,19 @@ fn worker(binary: bool) -> io::Result<()> {
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if let [mode, archive, destination, root] = arguments.as_slice() {
+        if mode == "--extract-ruby-sdk" {
+            if let Err(error) = sdk_archive::extract(
+                std::path::Path::new(archive),
+                std::path::Path::new(destination),
+                root,
+            ) {
+                eprintln!("Ruby Studio SDK extraction: {}", error);
+                std::process::exit(1);
+            }
+            return;
+        }
+    }
     let binary = arguments.as_slice() == ["--binary"];
     if !arguments.is_empty() && !binary {
         eprintln!("Ruby Studio native lexer: expected no arguments or --binary");
