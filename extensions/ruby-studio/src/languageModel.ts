@@ -23,7 +23,8 @@ export interface RubyDocument {
 	unsafeLocalSyntax: boolean; complexNamespace: boolean; issues: string[]; template: boolean; localAssignments: RubyLocalAssignment[];
 }
 export interface RubyLocalAssignment { symbolId: string; scopeId: number; tokenIndex: number; operatorIndex: number; operator: string; standalone: boolean }
-export interface RubyReference { uri: string; start: number; end: number; declaration: boolean; shorthand: boolean }
+export interface RubyReference { uri: string; start: number; end: number; declaration: boolean; shorthand: boolean; write: boolean }
+export interface RubyCallSite { uri: string; start: number; end: number; caller?: RubySymbol; target: RubySymbol }
 export interface RubyTextEdit { start: number; end: number; text: string }
 export type RenameFailure = 'noSymbol' | 'dynamicMethod' | 'unsupportedVariable' | 'keywordParameter' | 'reflection' | 'interpolation' | 'unsupportedSyntax' | 'incompleteIndex' | 'ambiguousConstant' | 'collision' | 'invalidName';
 export interface RubyRename { symbol?: RubySymbol; token?: RubyToken; failure?: RenameFailure; edits: Map<string, RubyTextEdit[]> }
@@ -220,7 +221,9 @@ export function parseRuby(uri: string, text: string, project = '', template = fa
 					let q = p + 2; const parts: string[] = []; let absoluteSuperclass = false;
 					if (tokens[q]?.text === '::') { absoluteSuperclass = true; q++; }
 					while (tokens[q]?.kind === 'constant') { parts.push(tokens[q].text); if (tokens[q + 1]?.text !== '::') { break; } q += 2; }
-					if (parts.length) { symbol.superclass = `${absoluteSuperclass ? '::' : ''}${parts.join('::')}`; }
+					const after = tokens[q + 1];
+					if (parts.length && (!after || after.kind === 'newline' || after.kind === 'comment' || after.text === ';')) { symbol.superclass = `${absoluteSuperclass ? '::' : ''}${parts.join('::')}`; }
+					else { symbol.dynamicAncestors = true; }
 				}
 				const id = newScope('namespace', token.start, qualified, true, symbol.id); frames.push({ closer: 'end', kind: token.text, line: token.line, scopeId: id });
 			}
@@ -330,25 +333,34 @@ export function parseRuby(uri: string, text: string, project = '', template = fa
 /** A workspace-folder-isolated index of original static Ruby declarations and references. */
 export class RubyIndex {
 	readonly documents = new Map<string, RubyDocument>();
+	revision = 0;
 	complete = true;
 	private readonly declarations = new Map<string, RubySymbol[]>();
+	private readonly libraryOwners = new Map<string, string[]>();
+	/** Shared installed files can belong to several project environments without leaking to other roots. */
+	updateLibrary(uri: string, text: string, projects: string[], tokens?: RubyToken[], defer = false): void { this.libraryOwners.set(uri, projects); this.documents.set(uri, parseRuby(uri, text, projects[0], false, tokens)); if (!defer) { this.rebuild(); } }
+	commitLibraries(): void { this.rebuild(); }
+	private belongs(document: RubyDocument, project: string): boolean { return document.project === project || !!this.libraryOwners.get(document.uri)?.includes(project); }
 	private readonly receiverTypes = new Map<string, string | null>();
 
 	update(uri: string, text: string, project = '', template = false, pretokenized?: RubyToken[]): RubyDocument {
+		const previous = this.documents.get(uri);
+		if (previous?.text === text && previous.project === project && previous.template === template) { return previous; }
 		const document = parseRuby(uri, text, project, template, pretokenized); this.documents.set(uri, document); this.rebuild(); return document;
 	}
-	remove(uri: string): void { this.documents.delete(uri); this.rebuild(); }
-	clear(): void { this.documents.clear(); this.declarations.clear(); this.receiverTypes.clear(); }
+	remove(uri: string): void { this.documents.delete(uri); this.libraryOwners.delete(uri); this.rebuild(); }
+	clear(): void { this.documents.clear(); this.libraryOwners.clear(); this.declarations.clear(); this.receiverTypes.clear(); this.revision++; }
 	private key(project: string, name: string): string { return `${project}\0${name}`; }
 	private rebuild(): void {
+		this.revision++;
 		this.declarations.clear(); this.receiverTypes.clear();
-		for (const document of this.documents.values()) { for (const symbol of document.symbols) { if (['class', 'module', 'constant', 'method', 'instanceVariable'].includes(symbol.kind)) { const key = this.key(document.project, symbol.qualifiedName); const symbols = this.declarations.get(key) || []; symbols.push(symbol); this.declarations.set(key, symbols); } } }
+		for (const document of this.documents.values()) { for (const project of this.libraryOwners.get(document.uri) || [document.project]) { for (const symbol of document.symbols) { if (['class', 'module', 'constant', 'method', 'instanceVariable'].includes(symbol.kind)) { const key = this.key(project, symbol.qualifiedName); const symbols = this.declarations.get(key) || []; symbols.push(symbol); this.declarations.set(key, symbols); } } } }
 	}
 	private declared(document: RubyDocument, qualified: string): RubySymbol[] { return this.declarations.get(this.key(document.project, qualified)) || []; }
-	private superclass(document: RubyDocument, owner: string): string | undefined {
+	private superclass(document: RubyDocument, owner: string, typeRelation = false): string | undefined {
 		const classes = this.declared(document, owner).filter(symbol => symbol.kind === 'class');
-		if (classes.length !== 1 || !classes[0].superclass || classes[0].dynamicAncestors) { return undefined; }
-		const symbol = classes[0]; const source = this.documents.get(symbol.uri)!; const name = symbol.superclass!;
+		if (classes.length !== 1 || !classes[0].superclass || (!typeRelation && classes[0].dynamicAncestors)) { return undefined; }
+		const symbol = classes[0]; const source = { ...this.documents.get(symbol.uri)!, project: document.project }; const name = symbol.superclass!;
 		for (const outer of name.startsWith('::') ? [''] : this.namespaceOwners(source, symbol.scopeId)) {
 			const qualified = outer ? `${outer}::${name}` : name.replace(/^::/, '');
 			if (this.declared(source, qualified).some(candidate => candidate.kind === 'class')) { return qualified; }
@@ -421,7 +433,7 @@ export class RubyIndex {
 		if (this.receiverTypes.has(symbol.id)) { return this.receiverTypes.get(symbol.id) || undefined; }
 		const hasControlFlow = document.tokens.some(token => token.scopeId === symbol.scopeId && ((token.kind === 'keyword' && receiverControlFlow.has(token.text)) || ['&&', '||', '?'].includes(token.text)));
 		const hasBlocks = document.scopes.some(scope => scope.kind === 'block' && scope.parentId === symbol.scopeId);
-		const reflected = [...this.documents.values()].some(source => source.project === document.project && source.tokens.some(token => (token.kind === 'identifier' && receiverReflection.has(token.text)) || (token.kind === 'keyword' && ['alias', 'undef'].includes(token.text))));
+		const reflected = [...this.documents.values()].some(source => this.belongs(source, document.project) && source.tokens.some(token => (token.kind === 'identifier' && receiverReflection.has(token.text)) || (token.kind === 'keyword' && ['alias', 'undef'].includes(token.text))));
 		const safe = !hasControlFlow && !hasBlocks && !reflected && this.closedClassHierarchy(document, candidate.owner)
 			&& !this.methods(document, candidate.owner, 'new', true).length && !this.declared(document, 'Class.new').length;
 		this.receiverTypes.set(symbol.id, safe ? candidate.owner : null);
@@ -484,14 +496,73 @@ export class RubyIndex {
 	references(symbol: RubySymbol, includeDeclaration = true): RubyReference[] {
 		const results: RubyReference[] = [];
 		for (const document of this.documents.values()) {
-			if (document.project !== this.documents.get(symbol.uri)?.project) { continue; }
+			const source = this.documents.get(symbol.uri);
+			if (!source || !this.belongs(source, document.project)) { continue; }
 			for (const [index, token] of document.tokens.entries()) {
 				if (!this.resolveToken(document, index).some(result => result.id === symbol.id)) { continue; }
 				const declaration = document.uri === symbol.uri && token.start === symbol.start;
-				if (includeDeclaration || !declaration) { results.push({ uri: document.uri, start: token.start, end: token.end, declaration, shorthand: this.isShorthand(document, index) }); }
+				if (includeDeclaration || !declaration) { results.push({ uri: document.uri, start: token.start, end: token.end, declaration, shorthand: this.isShorthand(document, index), write: declaration || document.localAssignments.some(assignment => assignment.tokenIndex === index) }); }
 			}
 		}
 		return results;
+	}
+
+	/** Get one environment's view of a shared dependency document. */
+	private inProject(uri: string, project?: string): RubyDocument | undefined {
+		const document = this.documents.get(uri);
+		if (!document || (project !== undefined && !this.belongs(document, project))) { return undefined; }
+		return project === undefined || document.project === project ? document : { ...document, project };
+	}
+	/** Explicit superclass edges remain useful when mixins make method dispatch uncertain. */
+	supertypes(symbol: RubySymbol, project?: string): RubySymbol[] {
+		const document = this.inProject(symbol.uri, project);
+		if (!document || symbol.kind !== 'class') { return []; }
+		const parent = this.superclass(document, symbol.qualifiedName, true);
+		return parent ? this.declared(document, parent).filter(candidate => candidate.kind === 'class') : [];
+	}
+	subtypes(symbol: RubySymbol, project?: string): RubySymbol[] {
+		const document = this.inProject(symbol.uri, project); if (!document || symbol.kind !== 'class') { return []; }
+		return [...this.documents.values()].filter(other => this.belongs(other, document.project)).flatMap(other => other.symbols)
+			.filter(candidate => candidate.kind === 'class' && this.superclass(document, candidate.qualifiedName, true) === symbol.qualifiedName).slice(0, 500);
+	}
+	private enclosingMethod(document: RubyDocument, scopeId: number): RubySymbol | undefined {
+		let scope: RubyScope | undefined = document.scopes[scopeId];
+		while (scope?.kind === 'block') { scope = scope.parentId === undefined ? undefined : document.scopes[scope.parentId]; }
+		return scope?.kind === 'method' ? document.symbols.find(symbol => symbol.id === scope.symbolId) : undefined;
+	}
+	/** Go to Super uses the enclosing method, or the explicit superclass outside methods. */
+	superDeclarations(uri: string, offset: number): RubySymbol[] {
+		const document = this.documents.get(uri); if (!document) { return []; }
+		const scope = document.scopes.filter(scope => scope.start <= offset && scope.end >= offset).at(-1) || document.scopes[0];
+		const method = this.enclosingMethod(document, scope.id);
+		if (method) { return this.superTargets(document, scope.id); }
+		const symbol = this.declared(document, scope.owner).find(symbol => symbol.kind === 'class');
+		return symbol ? this.supertypes(symbol, document.project) : [];
+	}
+	/** Call edges are limited to statically resolved calls, including ordinary constructors and super. */
+	private callSites(document: RubyDocument): RubyCallSite[] {
+		const sites: RubyCallSite[] = [];
+		for (const [index, token] of document.tokens.entries()) {
+			if (token.definitionId || (token.kind !== 'identifier' && !(token.kind === 'keyword' && token.text === 'super'))) { continue; }
+			for (const target of this.resolveToken(document, index)) {
+				if (target.kind === 'method') { sites.push({ uri: document.uri, start: token.start, end: token.end, caller: this.enclosingMethod(document, token.scopeId), target }); }
+			}
+		}
+		return sites;
+	}
+	incomingCalls(symbol: RubySymbol, project?: string): RubyCallSite[] {
+		const source = this.inProject(symbol.uri, project); if (!source || symbol.kind !== 'method') { return []; }
+		const sites: RubyCallSite[] = [];
+		for (const document of this.documents.values()) {
+			if (!this.belongs(document, source.project)) { continue; }
+			sites.push(...this.callSites({ ...document, project: source.project }).filter(site => site.target.id === symbol.id));
+			if (sites.length >= 1000) { break; }
+		}
+		return sites.slice(0, 1000);
+	}
+	outgoingCalls(uri: string, symbol?: RubySymbol, project?: string): RubyCallSite[] {
+		const document = this.inProject(uri, project); if (!document) { return []; }
+		return this.callSites(document).filter(site => site.caller?.id === symbol?.id).slice(0, 1000);
 	}
 
 	/** Refuses dynamic method renames, uncertain scopes, capture and hidden string references. */
@@ -541,6 +612,15 @@ export class RubyIndex {
 		const document = this.documents.get(uri); if (!document) { return []; }
 		const before = document.tokens.filter(token => token.end <= offset && token.kind !== 'comment' && token.kind !== 'newline');
 		const last = before.at(-1); const scope = document.scopes.filter(scope => scope.start <= offset && scope.end >= offset).at(-1) || document.scopes[0];
+		if (last?.text === '::') {
+			const receiver = before.at(-2); let owners: string[];
+			if (receiver?.kind === 'constant' && document.tokens[document.tokens.indexOf(last) - 1] === receiver) {
+				owners = this.constant(document, document.tokens.indexOf(receiver)).filter(symbol => ['class', 'module'].includes(symbol.kind)).map(symbol => symbol.qualifiedName);
+			} else { owners = ['']; }
+			return [...new Map([...this.documents.values()].filter(other => this.belongs(other, document.project)).flatMap(other => other.symbols)
+				.filter(symbol => ['class', 'module', 'constant'].includes(symbol.kind) && owners.includes(symbol.qualifiedName.split('::').slice(0, -1).join('::')))
+				.map(symbol => [symbol.qualifiedName, symbol])).values()];
+		}
 		if (last?.text === '.' || last?.text === '&.') {
 			const receiver = before.at(-2); let owner: string | undefined; let singleton = true;
 			if (receiver?.text === 'self') { owner = scope.owner; singleton = scope.singleton; }
@@ -553,29 +633,58 @@ export class RubyIndex {
 		let current: RubyScope | undefined = scope;
 		while (current) { visible.push(...[...current.locals.values()].filter(symbol => symbol.start <= offset)); if (current.kind !== 'block') { break; } current = current.parentId === undefined ? undefined : document.scopes[current.parentId]; }
 		visible.push(...this.ownerMethods(document, scope.owner, scope.singleton));
-		for (const other of this.documents.values()) { if (other.project === document.project) { visible.push(...other.symbols.filter(symbol => ['class', 'module', 'constant'].includes(symbol.kind))); } }
+		for (const other of this.documents.values()) { if (this.belongs(other, document.project)) { visible.push(...other.symbols.filter(symbol => ['class', 'module', 'constant'].includes(symbol.kind))); } }
 		return [...new Map(visible.map(symbol => [symbol.name, symbol])).values()];
 	}
 	private ownerMethods(document: RubyDocument, owner: string, singleton: boolean, visited = new Set<string>()): RubySymbol[] {
 		if (visited.has(owner) || visited.size > 12) { return []; } visited.add(owner);
-		const own = [...this.documents.values()].filter(other => other.project === document.project).flatMap(other => other.symbols).filter(symbol => symbol.kind === 'method' && symbol.owner === owner && symbol.singleton === singleton);
+		const own = [...this.documents.values()].filter(other => this.belongs(other, document.project)).flatMap(other => other.symbols).filter(symbol => symbol.kind === 'method' && symbol.owner === owner && symbol.singleton === singleton);
 		const parent = this.superclass(document, owner); return parent ? [...own, ...this.ownerMethods(document, parent, singleton, visited).filter(symbol => !own.some(candidate => candidate.name === symbol.name))] : own;
 	}
 
-	/** Locates a parenthesized, statically resolvable method call and its active argument. */
-	signature(uri: string, offset: number): { symbols: RubySymbol[]; activeParameter: number } | undefined {
+	/** Locate the innermost unfinished call while respecting nested arrays, hashes and calls. */
+	private callContext(uri: string, offset: number): { symbols: RubySymbol[]; arguments: RubyToken[][]; atBoundary: boolean } | undefined {
 		const document = this.documents.get(uri); if (!document) { return undefined; }
-		const before = document.tokens.filter(token => token.start < offset && token.kind !== 'comment'); let depth = 0; let commas = 0;
-		for (let i = before.length - 1; i >= 0; i--) {
-			const token = before[i];
-			if ([')', ']', '}'].includes(token.text)) { depth++; }
-			else if (['(', '[', '{'].includes(token.text)) {
-				if (depth) { depth--; }
-				else if (token.text === '(' && (before[i - 1]?.kind === 'identifier' || before[i - 1]?.text === 'super')) { const methods = this.resolve(uri, before[i - 1].start)?.definitions.filter(symbol => symbol.kind === 'method') || []; return methods.length ? { symbols: methods, activeParameter: commas } : undefined; }
-			} else if (token.text === ',' && !depth) { commas++; }
+		const stack: { opening: string; callee?: RubyToken; arguments: RubyToken[][] }[] = [];
+		let previous: RubyToken | undefined;
+		for (const token of document.tokens) {
+			if (token.start >= offset) { break; }
+			if (token.kind === 'comment' || token.kind === 'newline') { continue; }
+			if (['(', '[', '{'].includes(token.text)) { stack.push({ opening: token.text, callee: token.text === '(' ? previous : undefined, arguments: [[]] }); }
+			else if ([')', ']', '}'].includes(token.text)) {
+				const frame = stack.pop(); if (!frame || frame.opening !== ({ ')': '(', ']': '[', '}': '{' } as Record<string, string>)[token.text]) { return undefined; }
+				stack.at(-1)?.arguments.at(-1)?.push(token);
+			} else if (token.text === ',' && stack.length) { stack.at(-1)!.arguments.push([]); }
+			else { stack.at(-1)?.arguments.at(-1)?.push(token); }
+			previous = token;
 		}
-		return undefined;
+		const frameIndex = stack.findLastIndex(frame => !!frame.callee && (frame.callee.kind === 'identifier' || frame.callee.text === 'super'));
+		const frame = stack[frameIndex]; const callee = frame?.callee;
+		if (!frame || !callee || callee.definitionId || (callee.kind !== 'identifier' && callee.text !== 'super')) { return undefined; }
+		const symbols = this.resolve(uri, callee.start)?.definitions.filter(symbol => symbol.kind === 'method') || [];
+		return symbols.length ? { symbols, arguments: frame.arguments, atBoundary: frameIndex === stack.length - 1 } : undefined;
 	}
+	private keyword(argument: RubyToken[]): string | undefined { return argument[0]?.kind === 'identifier' && argument[1]?.text === ':' ? argument[0].text : undefined; }
+	/** Keyword labels select their actual declaration slot, independently of argument order. */
+	signature(uri: string, offset: number): { symbols: RubySymbol[]; activeParameter: number; activeParameters: number[] } | undefined {
+		const context = this.callContext(uri, offset); if (!context) { return undefined; }
+		const current = context.arguments.at(-1)!; const keyword = this.keyword(current);
+		const positional = context.arguments.slice(0, -1).filter(argument => !this.keyword(argument)).length;
+		const activeParameters = context.symbols.map(symbol => {
+			if (keyword) { const index = symbol.parameters.findIndex(parameter => parameter.keyword && parameter.name === keyword); if (index >= 0) { return index; } }
+			const positions = symbol.parameters.map((parameter, index) => ({ parameter, index })).filter(item => !item.parameter.keyword && !item.parameter.label.startsWith('**'));
+			const rest = positions.find(item => item.parameter.label.startsWith('*'));
+			return positions[positional]?.index ?? rest?.index ?? symbol.parameters.findIndex(parameter => parameter.keyword || parameter.label.startsWith('**'));
+		}).map(index => Math.max(0, index));
+		return { symbols: context.symbols, activeParameter: activeParameters[0], activeParameters };
+	}
+	/** Suggest only unused keyword labels at an argument boundary, never in a value expression. */
+	keywordCompletions(uri: string, offset: number): RubyParameter[] {
+		const context = this.callContext(uri, offset); if (!context || !context.atBoundary || context.arguments.at(-1)!.length) { return []; }
+		const used = new Set(context.arguments.slice(0, -1).map(argument => this.keyword(argument)).filter(Boolean));
+		return [...new Map(context.symbols.flatMap(symbol => symbol.parameters).filter(parameter => parameter.keyword && !used.has(parameter.name)).map(parameter => [parameter.name, parameter])).values()];
+	}
+
 }
 
 /** Whitespace-only formatting deliberately preserves multiline literal and DATA bytes. */

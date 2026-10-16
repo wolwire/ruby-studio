@@ -28,6 +28,7 @@ export interface RuntimeResolutionOptions {
 	configuredPath?: string;
 	env?: NodeJS.ProcessEnv;
 	trusted: boolean;
+	signal?: AbortSignal;
 }
 
 /** Load gem entry points with the selected Ruby, even if PATH contains shell wrappers. */
@@ -77,8 +78,8 @@ async function readOptional(filename: string): Promise<string> {
 	try { return await fs.readFile(filename, 'utf8'); } catch { return ''; }
 }
 
-async function validate(executable: string, prefix: string[], cwd: string, env: NodeJS.ProcessEnv, manager: string, selected?: string): Promise<RuntimeInfo> {
-	const { stdout } = await execute(executable, [...prefix, '-e', probe], { cwd, env, timeout: 20000, maxBuffer: 1024 * 1024, windowsHide: true });
+async function validate(executable: string, prefix: string[], cwd: string, env: NodeJS.ProcessEnv, manager: string, selected?: string, signal?: AbortSignal): Promise<RuntimeInfo> {
+	const { stdout } = await execute(executable, [...prefix, '-e', probe], { cwd, env, signal, timeout: 20000, maxBuffer: 1024 * 1024, windowsHide: true });
 	const payload = stdout.split(/\r?\n/).findLast(line => line.startsWith('RUBY_STUDIO_RUNTIME='));
 	if (!payload) { throw new Error('The selected command did not identify a Ruby interpreter.'); }
 	const result = JSON.parse(payload.slice('RUBY_STUDIO_RUNTIME='.length)) as { ruby: string; version: string; env: Record<string, string> };
@@ -108,13 +109,14 @@ export async function resolveRuntime(options: RuntimeResolutionOptions): Promise
 		const configured = expandRuntimeValue(options.configuredPath.trim(), cwd, env);
 		const executable = await findExecutable(configured, env, cwd);
 		if (!executable) { throw new Error(`Ruby interpreter not found: ${configured}`); }
-		return validate(executable, [], cwd, env, 'selected', executable);
+		return validate(executable, [], cwd, env, 'selected', executable, options.signal);
 	}
 	const [rubyVersion, toolVersions, miseConfig, hiddenMiseConfig] = await Promise.all([
 		readOptional(path.join(cwd, '.ruby-version')), readOptional(path.join(cwd, '.tool-versions')),
 		readOptional(path.join(cwd, 'mise.toml')), readOptional(path.join(cwd, '.mise.toml'))
 	]);
-	const version = rubyVersion.trim() || toolVersions.match(/^ruby\s+(?<version>\S+)/m)?.groups?.version || '';
+	const gemset = (await readOptional(path.join(cwd, '.ruby-gemset'))).trim();
+	const version = rubyVersion.trim().split('@')[0] || toolVersions.match(/^ruby\s+(?<version>\S+)/m)?.groups?.version || '';
 	const hasMise = /\bruby\s*=/.test(miseConfig + hiddenMiseConfig);
 	const managerPaths = [path.join(os.homedir(), '.local/bin'), path.join(os.homedir(), '.rbenv/bin'), path.join(os.homedir(), '.asdf/bin'), path.join(os.homedir(), '.rvm/bin')];
 	const searchEnv = { ...env, PATH: [env.PATH, ...managerPaths].filter(Boolean).join(path.delimiter) };
@@ -123,6 +125,7 @@ export async function resolveRuntime(options: RuntimeResolutionOptions): Promise
 		['asdf', ['exec', 'ruby'], /^ruby\s/m.test(toolVersions)],
 		['rbenv', ['exec', 'ruby'], Boolean(rubyVersion.trim())],
 		['chruby-exec', [version, '--', 'ruby'], Boolean(version)],
+		['rvm', [`${version}${gemset ? '@' + gemset : ''}`, 'do', 'ruby'], Boolean(version) && Boolean(gemset)],
 		['rvm-auto-ruby', [], Boolean(version)],
 		['mise', ['exec', '--', 'ruby'], Boolean(version)]
 	];
@@ -130,13 +133,13 @@ export async function resolveRuntime(options: RuntimeResolutionOptions): Promise
 		if (!relevant) { continue; }
 		const manager = await findExecutable(name, searchEnv, cwd);
 		if (manager) {
-			try { return await validate(manager, args, cwd, searchEnv, name); }
+			try { return await validate(manager, args, cwd, searchEnv, name, undefined, options.signal); }
 			catch (error) { throw new Error(`The ${name} Ruby environment could not start. ${error instanceof Error ? error.message : String(error)}`); }
 		}
 	}
 	for (const candidate of [env.RUBY_STUDIO_RUBY, 'ruby'].filter((value): value is string => Boolean(value))) {
 		const executable = await findExecutable(candidate, env, cwd);
-		if (executable) { return validate(executable, [], cwd, env, candidate === env.RUBY_STUDIO_RUBY ? 'bundled' : 'environment', executable); }
+		if (executable) { return validate(executable, [], cwd, env, candidate === env.RUBY_STUDIO_RUBY ? 'bundled' : 'environment', executable, options.signal); }
 	}
 	throw new Error('No Ruby interpreter was found. Use Select Ruby Interpreter to choose one.');
 }
@@ -144,6 +147,7 @@ export async function resolveRuntime(options: RuntimeResolutionOptions): Promise
 /** Workspace-aware SDK selection, terminal and native task integration. */
 export class RuntimeService implements vscode.Disposable {
 	private readonly disposables: vscode.Disposable[] = [];
+	private epoch = 0;
 	private readonly cache = new Map<string, Promise<RuntimeInfo>>();
 	private readonly status: vscode.StatusBarItem;
 
@@ -156,10 +160,10 @@ export class RuntimeService implements vscode.Disposable {
 		this.status.tooltip = api.l10n.t('Select Ruby Interpreter');
 		this.status.show();
 		this.disposables.push(api.workspace.onDidChangeConfiguration(event => {
-			if (event.affectsConfiguration('rubyStudio.interpreterPath')) { this.cache.clear(); }
+			if (event.affectsConfiguration('rubyStudio.interpreterPath')) { this.invalidate(); }
 		}));
 		this.disposables.push(api.workspace.onDidSaveTextDocument(document => {
-			if (['.ruby-version', '.tool-versions', 'mise.toml', '.mise.toml', 'Gemfile', 'Gemfile.lock'].includes(path.basename(document.uri.fsPath))) { this.cache.clear(); }
+			if (['.ruby-version', '.tool-versions', 'mise.toml', '.mise.toml', 'Gemfile', 'Gemfile.lock'].includes(path.basename(document.uri.fsPath))) { this.invalidate(); }
 		}));
 	}
 
@@ -176,7 +180,9 @@ export class RuntimeService implements vscode.Disposable {
 		return undefined;
 	}
 
-	async get(folder?: vscode.WorkspaceFolder): Promise<RuntimeInfo> {
+	invalidate(): void { this.epoch++; this.cache.clear(); }
+
+	async get(folder?: vscode.WorkspaceFolder, signal?: AbortSignal): Promise<RuntimeInfo> {
 		const api: typeof vscode = require('vscode');
 		if (!api.workspace.isTrusted) { throw new Error(api.l10n.t('Trust this workspace before running Ruby.')); }
 		const selected = await this.folder(folder);
@@ -184,14 +190,18 @@ export class RuntimeService implements vscode.Disposable {
 		const activeFile = api.window.activeTextEditor?.document.uri;
 		const cwd = selected?.uri.fsPath || (activeFile?.scheme === 'file' ? path.dirname(activeFile.fsPath) : os.homedir());
 		const configuredPath = api.workspace.getConfiguration('rubyStudio', selected?.uri).get<string>('interpreterPath', '');
+		const epoch = this.epoch;
 		const key = `${cwd}\0${configuredPath}`;
-		let pending = this.cache.get(key);
+		let pending = signal ? undefined : this.cache.get(key);
 		if (!pending) {
-			pending = resolveRuntime({ cwd, configuredPath, trusted: true });
-			this.cache.set(key, pending);
+			pending = resolveRuntime({ cwd, configuredPath, trusted: true, signal });
+			if (!signal) { this.cache.set(key, pending); }
 			pending.catch(() => this.cache.delete(key));
 		}
 		const result = await pending;
+		signal?.throwIfAborted();
+		if (!signal && epoch !== this.epoch) { throw new Error(api.l10n.t('The Ruby environment changed. Try again.')); }
+		if (selected && api.window.activeTextEditor && api.workspace.getWorkspaceFolder(api.window.activeTextEditor.document.uri)?.uri.toString() !== selected.uri.toString()) { return result; }
 		this.status.text = `$(ruby) ${result.version.split(' ').slice(0, 2).join(' ')}`;
 		this.status.tooltip = `${result.ruby}\n${result.manager}\n${result.cwd}`;
 		return result;
@@ -226,5 +236,5 @@ export class RuntimeService implements vscode.Disposable {
 		return api.tasks.executeTask(task);
 	}
 
-	dispose(): void { this.disposables.splice(0).forEach(disposable => disposable.dispose()); this.cache.clear(); }
+	dispose(): void { this.disposables.splice(0).forEach(disposable => disposable.dispose()); this.invalidate(); }
 }

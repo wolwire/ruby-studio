@@ -165,7 +165,14 @@ export function registerTesting(context: vscode.ExtensionContext, runtime: Runti
 		file.error = framework ? undefined : vscode.l10n.t('The test framework is ambiguous. Add a literal Minitest/RSpec import, or an explicit RSpec.describe declaration, then refresh tests.');
 	};
 	const discover = async () => {
-		const files = (await vscode.workspace.findFiles('**/{test_*.rb,*_test.rb,*_spec.rb}', '**/{node_modules,vendor,.git,.bundle}/**', 20000)).filter(uri => path.basename(uri.fsPath) !== 'test_helper.rb');
+		const conventional = (uri: vscode.Uri): boolean => {
+			const folder = vscode.workspace.getWorkspaceFolder(uri); if (!folder) { return false; }
+			const roots = vscode.workspace.getConfiguration('rubyStudio', folder.uri).get<string[]>('testRoots', ['features', 'spec', 'test']);
+			return roots.some(root => root && !path.isAbsolute(root) && !root.split(/[\\/]/).includes('..') && path.relative(path.join(folder.uri.fsPath, root), uri.fsPath).split(path.sep)[0] !== '..');
+		};
+		const files = (await vscode.workspace.findFiles('**/{test_*.rb,*_test.rb,*_spec.rb}', '**/{node_modules,vendor,.git,.bundle}/**', 20000))
+			.filter(uri => path.basename(uri.fsPath) !== 'test_helper.rb')
+			.sort((left, right) => Number(conventional(right)) - Number(conventional(left)) || left.fsPath.localeCompare(right.fsPath));
 		const existing = new Set(files.map(uri => uri.toString()));
 		controller.items.forEach(item => { if (!existing.has(item.id)) { controller.items.delete(item.id); } });
 		for (const file of files) {

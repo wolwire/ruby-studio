@@ -5,7 +5,9 @@
 
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
+import * as path from 'node:path';
 import { RuntimeService } from './runtime';
+import type { ProjectEnvironmentService } from './projectEnvironment';
 
 interface LockedGem {
 	name: string;
@@ -36,9 +38,10 @@ export function parseGemfileLock(text: string): LockedGem[] {
 }
 
 class GemItem extends vscode.TreeItem {
-	constructor(label: string, readonly folder: vscode.WorkspaceFolder, readonly kind: 'folder' | 'gem' | 'dependency' | 'message', readonly gem?: LockedGem, readonly allGems: LockedGem[] = []) {
-		super(label, kind === 'folder' || (kind === 'gem' && !!gem?.dependencies.length) ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
+	constructor(label: string, readonly folder: vscode.WorkspaceFolder, readonly kind: 'folder' | 'gem' | 'dependency' | 'message' | 'source', readonly gem?: LockedGem, readonly allGems: LockedGem[] = [], readonly sourcePath?: string, directory = false) {
+		super(label, kind === 'folder' || (kind === 'source' && directory) || (kind === 'gem' && !!gem?.dependencies.length) ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
 		this.contextValue = `rubyStudio.${kind}`;
+		if (sourcePath) { this.resourceUri = vscode.Uri.file(sourcePath); this.iconPath = new vscode.ThemeIcon(directory ? 'folder' : 'file'); if (!directory) { this.command = { command: 'vscode.open', title: vscode.l10n.t('Open Dependency Source'), arguments: [this.resourceUri] }; } }
 		if (gem) {
 			this.description = gem.version;
 			this.tooltip = `${gem.name} (${gem.version})\n${gem.dependencies.join(', ')}`;
@@ -49,6 +52,7 @@ class GemItem extends vscode.TreeItem {
 }
 
 class GemTree implements vscode.TreeDataProvider<GemItem>, vscode.Disposable {
+	constructor(private readonly environments?: ProjectEnvironmentService) { }
 	private readonly changed = new vscode.EventEmitter<GemItem | undefined>();
 	readonly onDidChangeTreeData = this.changed.event;
 	refresh(): void { this.changed.fire(undefined); }
@@ -56,6 +60,9 @@ class GemTree implements vscode.TreeDataProvider<GemItem>, vscode.Disposable {
 	getTreeItem(item: GemItem): GemItem { return item; }
 	async getChildren(item?: GemItem): Promise<GemItem[]> {
 		if (!item) { return (vscode.workspace.workspaceFolders || []).map(folder => new GemItem(folder.name, folder, 'folder')); }
+		if (item.kind === 'source' && item.sourcePath) {
+			try { return (await fs.readdir(item.sourcePath, { withFileTypes: true })).filter(entry => !entry.isSymbolicLink() && !entry.name.startsWith('.')).sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name)).slice(0, 1000).map(entry => new GemItem(entry.name, item.folder, 'source', undefined, [], path.join(item.sourcePath!, entry.name), entry.isDirectory())); } catch { return []; }
+		}
 		if (item.kind === 'gem' && item.gem) {
 			return item.gem.dependencies.map(name => {
 				const gem = item.allGems.find(gem => gem.name === name);
@@ -80,6 +87,15 @@ class GemTree implements vscode.TreeDataProvider<GemItem>, vscode.Disposable {
 			const itemLabel = error instanceof Error && 'code' in error && error.code === 'ENOENT' ? vscode.l10n.t('No Gemfile.lock — Run Bundle Install') : vscode.l10n.t('Cannot Read Gemfile.lock: {0}', error instanceof Error ? error.message : String(error));
 			result.push(new GemItem(itemLabel, item.folder, 'message'));
 		}
+		const state = this.environments?.states.get(item.folder.uri.fsPath);
+		for (const dependency of state?.dependencies || []) {
+			const source = new GemItem(dependency.name, item.folder, 'source', undefined, [], dependency.sourcePath, true);
+			source.description = `${dependency.version} · ${dependency.source}`;
+			source.tooltip = dependency.sourcePath;
+			source.iconPath = new vscode.ThemeIcon('library');
+			result.push(source);
+		}
+		if (state && !['none', 'ready'].includes(state.bundle)) { const status = new GemItem(vscode.l10n.t('Dependencies: {0}', state.bundle), item.folder, 'message'); status.command = { command: 'rubyStudio.projectEnvironment', title: vscode.l10n.t('Project Environment') }; result.push(status); }
 		return result;
 	}
 }
@@ -103,13 +119,14 @@ async function runTool(runtime: RuntimeService, name: string, args: string[], it
 }
 
 /** Registers explicit gem installation/update actions and a read-only lockfile tree. */
-export function registerDependencies(_context: vscode.ExtensionContext, runtime: RuntimeService): vscode.Disposable[] {
-	const tree = new GemTree();
+export function registerDependencies(_context: vscode.ExtensionContext, runtime: RuntimeService, environments?: ProjectEnvironmentService): vscode.Disposable[] {
+	const tree = new GemTree(environments);
 	const disposables: vscode.Disposable[] = [tree, vscode.window.registerTreeDataProvider('rubyStudio.gems', tree)];
 	const register = (name: string, callback: (item?: GemItem) => Promise<void> | void) => disposables.push(vscode.commands.registerCommand(`rubyStudio.${name}`, async (item?: GemItem) => {
 		try { await callback(item); } catch (error) { void vscode.window.showErrorMessage(vscode.l10n.t('Ruby Dependencies: {0}', error instanceof Error ? error.message : String(error))); }
 	}));
-	register('refreshGems', () => tree.refresh());
+	register('refreshGems', () => { environments?.refresh(); tree.refresh(); });
+	if (environments) { disposables.push(environments.onDidChange(() => tree.refresh())); }
 	register('bundleInstall', item => runTool(runtime, vscode.l10n.t('Bundle Install'), ['-S', 'bundle', 'install'], item));
 	register('bundleUpdate', async item => {
 		const chosen = await vscode.window.showQuickPick([

@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 license = "MIT"
-description = "Original bounded Ruby lexer worker for Ruby Studio"
+description = "Ruby Studio native lexer and portable SDK archive worker"
+
+[dependencies]
+sevenz-rust2 = { version = "=0.24.0", default-features = false, features = ["util"] }
 
 [profile.release]
 lto = true

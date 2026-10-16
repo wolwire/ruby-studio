@@ -5,19 +5,23 @@
 (() => {
 	const api = acquireVsCodeApi();
 	let state, draft = {}, runs = [], selected = '', index = 0, section = '', dirty = false, busy = false;
-	let search = '';
+	let search = '', versions = [], rubyVersion = '', installing = false, installLog = '', installMessage = '';
 	const app = document.getElementById('app');
 	const t = value => state.labels[value] || value;
 	const node = (tag, text, className) => { const element = document.createElement(tag); if (text) { element.textContent = text; } if (className) { element.className = className; } return element; };
 	const send = (command, data = {}) => { busy = true; controls(); api.postMessage({ command, ...data }); };
-	const changed = () => { dirty = true; status(t('Unsaved Changes')); persist(); controls(); };
+	const changed = () => { installMessage = ''; dirty = true; status(t('Unsaved Changes')); persist(); controls(); };
 	const persist = () => api.setState({ revision: state.revision, draft, runs, selected, index, section, dirty });
 	const status = (text, error = false) => { const target = document.getElementById('status'); if (target) { target.textContent = text; target.classList.toggle('error', error); } };
 	const controls = () => {
-		for (const control of document.querySelectorAll('button,input,select,textarea')) { control.disabled = busy; }
+		for (const control of document.querySelectorAll('button,input,select,textarea')) { control.disabled = busy || installing; }
+		const progress = document.getElementById('installProgress'); if (progress) { progress.hidden = !installing; }
+		const stop = document.getElementById('stopInstall'); if (stop) { stop.disabled = !installing; }
+		const picker = document.getElementById('rubyVersion'); if (picker) { picker.disabled = busy || installing || !versions.length; }
+		const install = document.getElementById('installRuby'); if (install) { install.disabled = busy || !rubyVersion; }
 		const apply = document.getElementById('apply'); if (apply) { apply.disabled = busy || !dirty; }
 		const scope = document.getElementById('scope'); if (scope) { scope.disabled = busy || dirty; }
-		if (dirty && !busy && !document.getElementById('status')?.classList.contains('error')) { status(t('Unsaved Changes')); }
+		if (dirty && !busy && !installMessage && !document.getElementById('status')?.classList.contains('error')) { status(t('Unsaved Changes')); }
 	};
 	const button = (label, action, className) => { const element = node('button', t(label), className); element.type = 'button'; element.addEventListener('click', action); return element; };
 	const save = close => {
@@ -58,12 +62,30 @@
 			input.addEventListener('input', () => { draft[field.key] = field.type === 'boolean' ? input.checked : field.type === 'number' ? Number(input.value) : input.value; changed(); }); row.append(input);
 			row.append(button('Use Inherited Value', () => { draft[field.key] = null; changed(); renderContent(); }, 'reset')); main.append(row);
 		}
-		if (section === 'sdk' && !query) {
+		if ((section === 'sdk' && !query) || (query && /ruby|install|version|sdk/.test(query))) {
 			main.append(node('h2', t('Interpreter Version and Gems')));
 			const tools = node('div', '', 'tools'); const interpreter = () => String(draft['rubyStudio.interpreterPath'] ?? state.values['rubyStudio.interpreterPath'] ?? '');
 			tools.append(button('Browse', () => send('browse')), button('Validate', () => send('validate', { interpreter: interpreter() })), button('Refresh Gems', () => send('gems', { interpreter: interpreter() }))); main.append(tools); const detail = node('pre'); detail.id = 'runtime'; main.append(detail); const gems = node('div'); gems.id = 'gems'; main.append(gems);
+			renderInstaller(main);
 		}
 		controls();
+	};
+	const renderInstaller = main => {
+		const heading = node('h2', t('Install Ruby')); heading.id = 'sdkInstaller'; main.append(heading);
+		if (!state.canInstallRuby) { return; }
+		main.append(node('p', t('Install a Ruby version for this computer. Downloads are verified and stored in Ruby Studio’s user storage.')));
+		main.append(node('p', state.installerHelp));
+		const tools = node('div', '', 'tools'); const select = node('select'); select.id = 'rubyVersion'; select.setAttribute('aria-label', t('Ruby Version'));
+		if (!versions.length) { const placeholder = node('option', t('Select Ruby Version')); placeholder.value = ''; placeholder.disabled = true; placeholder.selected = true; select.append(placeholder); }
+		for (const version of versions) { const option = node('option', version); option.value = version; option.selected = version === rubyVersion; select.append(option); }
+		select.addEventListener('change', () => { rubyVersion = select.value; controls(); });
+		const start = button('Install Ruby', () => send('installRuby', { version: rubyVersion }), 'primary'); start.id = 'installRuby';
+		const stop = button('Stop Installation', () => api.postMessage({ command: 'stopInstall' })); stop.id = 'stopInstall';
+		tools.append(select, button('Refresh Versions', () => send('rubyVersions')), start, stop); main.append(tools);
+		main.append(node('p', t('Completed SDKs are kept when you Cancel settings. Apply or OK selects the installed SDK.')));
+		const progress = node('progress'); progress.id = 'installProgress'; progress.hidden = !installing; progress.setAttribute('aria-label', t('Installation Progress')); main.append(progress);
+		const details = node('details'); details.id = 'installDetails'; details.append(node('summary', t('Installation Log')));
+		const log = node('pre', installLog, 'installation-log'); log.id = 'installLog'; log.setAttribute('aria-label', t('Installation Log')); log.tabIndex = 0; details.append(log); main.append(details);
 	};
 	const renderRuns = main => {
 		const toolbar = node('div', '', 'tools'); const pick = node('select'); pick.setAttribute('aria-label', t('Select Configuration'));
@@ -83,12 +105,17 @@
 	window.addEventListener('message', event => {
 		const message = event.data;
 		if (message.command === 'state') { const saved = api.getState(); state = message; if (saved?.revision === state.revision) { ({ draft, runs, selected, index, section, dirty } = saved); } else { draft = {}; runs = state.configurations.map(run => ({ ...run, argumentsText: JSON.stringify(run.args || [], null, 2), environmentText: JSON.stringify(run.env || {}, null, 2) })); selected = state.selected; index = Math.max(0, runs.findIndex(run => run.name === selected)); section = section || state.section; dirty = false; } render(); persist(); }
-		else if (message.command === 'section') { section = message.section; render(); persist(); }
+		else if (message.command === 'section') { section = message.section; if (message.installRequested) { search = ''; } render(); persist(); if (message.installRequested) { document.getElementById('sdkInstaller')?.scrollIntoView({ block: 'start' }); if (!versions.length && !busy) { send('rubyVersions'); } } }
 		else if (message.command === 'interpreter') { draft['rubyStudio.interpreterPath'] = message.value; dirty = true; renderContent(); persist(); }
 		else if (message.command === 'validated') { const detail = document.getElementById('runtime'); if (detail) { detail.textContent = `${message.version}\n${message.ruby}\n${message.manager}`; } const gems = document.getElementById('gems'); if (gems && message.gems) { gems.replaceChildren(...message.gems.map(gem => node('div', `${gem.name}  ${gem.version}`, 'gem'))); } status(message.version); }
+		else if (message.command === 'installStarted') { installing = true; busy = true; installLog = ''; installMessage = t(message.listing ? 'Loading Ruby Versions' : 'Installing Ruby'); status(installMessage); const log = document.getElementById('installLog'); if (log) { log.textContent = ''; } controls(); }
+		else if (message.command === 'installOutput') { installLog = (installLog + message.text).slice(-65536); const log = document.getElementById('installLog'); if (log) { log.textContent = installLog; log.scrollTop = log.scrollHeight; } }
+		else if (message.command === 'rubyVersions') { versions = message.versions; rubyVersion = versions.includes(rubyVersion) ? rubyVersion : versions[0] || ''; installMessage = ''; renderContent(); status(''); document.getElementById('sdkInstaller')?.scrollIntoView({ block: 'start' }); }
+		else if (message.command === 'rubyInstalled') { draft['rubyStudio.interpreterPath'] = message.value; dirty = true; if (!state.candidates.includes(message.value)) { state.candidates.push(message.value); } installMessage = t('Ruby Installed — Click Apply to Use It'); renderContent(); persist(); status(installMessage); const detail = document.getElementById('runtime'); if (detail) { detail.textContent = message.version; } }
+		else if (message.command === 'installFinished') { installing = false; controls(); }
 		else if (message.command === 'error') { status(message.message, true); }
-		else if (message.command === 'saved') { dirty = false; persist(); status(t('Saved')); }
-		else if (message.command === 'idle') { busy = false; controls(); }
+		else if (message.command === 'saved') { installMessage = ''; dirty = false; persist(); status(t('Saved')); }
+		else if (message.command === 'idle') { busy = installing; if (state.installRequested && !versions.length && !busy) { state.installRequested = false; send('rubyVersions'); } else { controls(); } }
 	});
 	document.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); if (search) { search = ''; render(); } else if (!busy) { send('cancel'); } } if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); if (!busy) { save(true); } } });
 	api.postMessage({ command: 'ready' });
