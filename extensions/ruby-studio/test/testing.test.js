@@ -210,7 +210,7 @@ function cancellationHarness(directory, file) {
 		Uri: { joinPath: (base, ...parts) => uri(path.join(base.fsPath, ...parts)) },
 		l10n: { t: text => text },
 		commands: { registerCommand: (id, callback) => { commands.set(id, callback); return disposable(); }, executeCommand: async (...args) => { contexts.push(args); } },
-		workspace: { isTrusted: true, saveAll: async () => true, getWorkspaceFolder: () => folder, findFiles: async () => [uri(file)], fs: { readFile: async uri => fs.promises.readFile(uri.fsPath) }, createFileSystemWatcher: () => watcher, onDidChangeTextDocument: disposable },
+		workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }), isTrusted: true, saveAll: async () => true, getWorkspaceFolder: () => folder, findFiles: async () => [uri(file)], fs: { readFile: async uri => fs.promises.readFile(uri.fsPath) }, createFileSystemWatcher: () => watcher, onDidChangeTextDocument: disposable },
 		window: { showWarningMessage() { }, showErrorMessage() { } },
 		debug: { onDidStartDebugSession: disposable, onDidTerminateDebugSession: disposable, registerDebugAdapterTrackerFactory: disposable }
 	};

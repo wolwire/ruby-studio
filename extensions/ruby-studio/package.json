@@ -19,7 +19,11 @@
 		"onStartupFinished",
 		"onLanguage:ruby",
 		"onLanguage:erb",
-		"onDebug:rubyStudio"
+		"onDebug:rubyStudio",
+		"onCommand:rubyStudio.projectCandidates",
+		"onCommand:rubyStudio.validateProject",
+		"onCommand:rubyStudio.createEmptyProject",
+		"onCommand:rubyStudio.getProjectEnvironments"
 	],
 	"capabilities": {
 		"virtualWorkspaces": false,
@@ -115,11 +119,6 @@
 			{
 				"command": "rubyStudio.refreshRails",
 				"title": "%command.refreshRails%",
-				"category": "Ruby Studio"
-			},
-			{
-				"command": "rubyStudio.createProject",
-				"title": "%command.createProject%",
 				"category": "Ruby Studio"
 			},
 			{
@@ -224,6 +223,26 @@
 				"title": "%command.installRuby%",
 				"category": "Ruby Studio",
 				"icon": "$(cloud-download)"
+			},
+			{
+				"command": "rubyStudio.refreshEnvironment",
+				"title": "Refresh Project Environment",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.projectEnvironment",
+				"title": "Project Environment",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.createTemplateProject",
+				"title": "New Ruby Starter, Gem or Rails Project",
+				"category": "Ruby Studio"
+			},
+			{
+				"command": "rubyStudio.gotoSuper",
+				"title": "%command.gotoSuper%",
+				"category": "Ruby Studio"
 			}
 		],
 		"viewsContainers": {
@@ -295,6 +314,26 @@
 					"minimum": 1,
 					"maximum": 10000,
 					"description": "Maximum Ruby files indexed per workspace folder."
+				},
+				"rubyStudio.testRoots": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [
+						"features",
+						"spec",
+						"test"
+					],
+					"scope": "resource",
+					"description": "Conventional project test source roots."
+				},
+				"rubyStudio.maxLibraryFiles": {
+					"type": "number",
+					"default": 4000,
+					"minimum": 1,
+					"maximum": 20000,
+					"description": "Maximum installed dependency source files to index. Skipped roots remain visible in project environment status."
 				}
 			}
 		},
@@ -473,6 +512,13 @@
 					"command": "rubyStudio.openSettings",
 					"group": "1_settings",
 					"order": 0
+				}
+			],
+			"editor/context": [
+				{
+					"command": "rubyStudio.gotoSuper",
+					"when": "editorLangId == ruby || editorLangId == erb",
+					"group": "navigation@4"
 				}
 			]
 		},

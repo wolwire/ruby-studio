@@ -202,7 +202,7 @@ async function generateRails(runtime: RuntimeService): Promise<void> {
 
 async function createProject(runtime: RuntimeService): Promise<void> {
 	if (!await trusted()) { return; }
-	const kind = await vscode.window.showQuickPick(['Ruby Project', 'Ruby Gem', 'Rails Application']);
+	const kind = await vscode.window.showQuickPick(['Ruby Starter Application', 'Ruby Gem', 'Rails Application']);
 	if (!kind) { return; }
 	const parent = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, openLabel: vscode.l10n.t('Choose Parent Folder') });
 	if (!parent?.length) { return; }
@@ -249,7 +249,7 @@ export function registerRails(_context: vscode.ExtensionContext, runtime: Runtim
 	register('migrateRails', () => runRails(runtime, vscode.l10n.t('Rails Migrations'), ['db:migrate']));
 	register('generateRails', () => generateRails(runtime));
 	register('relatedFile', relatedFile);
-	register('createProject', () => createProject(runtime));
+	register('createTemplateProject', () => createProject(runtime));
 	disposables.push(vscode.workspace.onDidChangeWorkspaceFolders(() => tree.refresh()));
 	return disposables;
 }

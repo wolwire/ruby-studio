@@ -350,3 +350,85 @@ test('keyword shorthand rename preserves actual Ruby keyword arguments', { skip:
 	const text = 'def consume(value:)\n  value\nend\ndef run(value)\n  consume(value:)\nend\nputs run(7)\n'; const { index, uri } = indexed(text); const renamed = index.rename(uri, text.indexOf('run(value)') + 4, 'amount');
 	const result = spawnSync(ruby, ['-'], { input: rewritten(text, renamed.edits.get(uri)), encoding: 'utf8' }); assert.deepEqual([result.status, result.stdout.replace(/\r\n/g, '\n')], [0, '7\n']);
 });
+
+test('qualified constant completion lists direct namespace members without leaking other projects', () => {
+	const index = new RubyIndex(); index.update('domain.rb', 'module Billing\n  class Invoice\n    RATE = 2\n  end\n  module Nested\n    class Hidden\n    end\n  end\nend\n', 'a'); index.update('other.rb', 'module Billing\n  class Secret\n  end\nend\n', 'b');
+	const text = 'Billing::'; index.update('main.rb', text, 'a');
+	assert.deepEqual(index.completions('main.rb', text.length).map(symbol => symbol.qualifiedName).sort(), ['Billing::Invoice', 'Billing::Nested']);
+});
+test('absolute and relative qualified completion resolve the containing namespace', () => {
+	const text = 'module Billing\n  module Models\n    class Invoice\n    end\n  end\n  Models::\nend\n'; const { index, uri } = indexed(text);
+	assert.deepEqual(index.completions(uri, text.indexOf('Models::\n') + 8).map(symbol => symbol.qualifiedName), ['Billing::Models::Invoice']);
+});
+test('keyword completion excludes supplied names and does not suggest labels inside a value or hash', () => {
+	const text = 'def total(amount, tax: 0, discount: 0, **options)\nend\ntotal(1, tax: 2, )\n'; const { index, uri } = indexed(text);
+	assert.deepEqual(index.keywordCompletions(uri, text.lastIndexOf(')')).map(parameter => parameter.name), ['discount']);
+	assert.deepEqual(index.keywordCompletions(uri, text.indexOf('tax: 2') + 5), []);
+	index.update(uri, text.replace('tax: 2, ', '{ tax: 2, ')); assert.deepEqual(index.keywordCompletions(uri, index.documents.get(uri).text.lastIndexOf(')')), []);
+});
+test('keyword signature help uses declaration slots rather than the argument order and ignores nested commas', () => {
+	const text = 'def total(amount, tax: 0, discount: 0)\nend\ntotal(other(1, 2), discount: 3, tax: 4)\n'; const { index, uri } = indexed(text);
+	assert.deepEqual([index.signature(uri, text.indexOf('discount: 3') + 11).activeParameter, index.signature(uri, text.indexOf('tax: 4') + 6).activeParameter], [2, 1]);
+	assert.equal(index.signature(uri, text.indexOf('amount') + 2), undefined);
+});
+test('keyword suggestions work for inherited constructor signatures', () => {
+	const text = 'class Base\n  def initialize(amount, tax: 0)\n  end\nend\nclass Invoice < Base\nend\nInvoice.new(1, )\n'; const { index, uri } = indexed(text);
+	assert.deepEqual(index.keywordCompletions(uri, text.lastIndexOf(')')).map(parameter => parameter.name), ['tax']);
+});
+test('type hierarchy follows explicit namespaced parents even when mixins make dispatch uncertain', () => {
+	const text = 'module Billing\n  class Base\n  end\n  class Invoice < Base\n    include Pricing\n  end\nend\n'; const { index, document } = indexed(text); const [base, invoice] = document.symbols.filter(symbol => symbol.kind === 'class');
+	assert.deepEqual([index.supertypes(invoice).map(symbol => symbol.qualifiedName), index.subtypes(base).map(symbol => symbol.qualifiedName)], [['Billing::Base'], ['Billing::Invoice']]);
+});
+test('unknown type parents and same names from other roots do not create hierarchy edges', () => {
+	const index = new RubyIndex(); const a = index.update('a.rb', 'class Base\nend\nclass Invoice < Unknown\nend\n', 'a'); index.update('b.rb', 'class Unknown\nend\nclass Child < Base\nend\n', 'b');
+	assert.deepEqual([index.supertypes(a.symbols[1]), index.subtypes(a.symbols[0])], [[], []]);
+});
+test('Go to Super finds the parent method from inside a block and the parent class outside methods', () => {
+	const text = 'class Base\n  def total\n    1\n  end\nend\nclass Invoice < Base\n  def total\n    [1].each do |value|\n      value\n    end\n  end\nend\n'; const { index, uri } = indexed(text);
+	assert.deepEqual([index.superDeclarations(uri, text.lastIndexOf('value\n')).map(symbol => symbol.qualifiedName), index.superDeclarations(uri, text.indexOf('Invoice')).map(symbol => symbol.qualifiedName)], [['Base#total'], ['Base']]);
+});
+test('read/write references distinguish initial assignment, compound assignment, reads and shadowed block parameters', () => {
+	const text = 'value = 1\nvalue += 2\n[3].each do |value|\n  value\nend\nputs value\n'; const { index, document } = indexed(text); const local = document.symbols.find(symbol => symbol.kind === 'variable');
+	assert.deepEqual(index.references(local).map(reference => ({ start: reference.start, write: reference.write })), [{ start: text.indexOf('value'), write: true }, { start: text.indexOf('value +='), write: true }, { start: text.lastIndexOf('value'), write: false }]);
+});
+test('call hierarchy contains actual calls and super, excluding method declarations and nested method bodies', () => {
+	const text = 'class Base\n  def total\n    1\n  end\nend\nclass Invoice < Base\n  def total\n    super\n  end\n  def run\n    total\n    total\n  end\nend\n'; const { index, document, uri } = indexed(text);
+	const base = document.symbols.find(symbol => symbol.qualifiedName === 'Base#total'); const run = document.symbols.find(symbol => symbol.qualifiedName === 'Invoice#run');
+	assert.deepEqual(index.incomingCalls(base).map(site => [site.caller.qualifiedName, text.slice(site.start, site.end)]), [['Invoice#total', 'super']]);
+	assert.deepEqual(index.outgoingCalls(uri, run).map(site => site.target.qualifiedName), ['Invoice#total', 'Invoice#total']);
+});
+test('constructor calls have a top-level file caller and use initialize as the target', () => {
+	const text = 'class Invoice\n  def initialize(amount)\n  end\nend\nInvoice.new(2)\n'; const { index, document, uri } = indexed(text); const initialize = document.symbols.find(symbol => symbol.name === 'initialize');
+	assert.deepEqual(index.incomingCalls(initialize).map(site => ({ caller: site.caller, name: text.slice(site.start, site.end) })), [{ caller: undefined, name: 'new' }]);
+	assert.equal(index.outgoingCalls(uri)[0].target.id, initialize.id);
+});
+test('shared dependency call hierarchy keeps the initiating project throughout traversal', () => {
+	const index = new RubyIndex(); index.updateLibrary('shared.rb', 'class Base\n  def total\n    1\n  end\nend\n', ['a', 'b']);
+	for (const project of ['a', 'b']) { index.update(project + '.rb', `class Child${project.toUpperCase()} < Base\n  def run\n    total\n  end\nend\n`, project); }
+	const base = index.documents.get('shared.rb').symbols.find(symbol => symbol.name === 'total');
+	assert.deepEqual(index.incomingCalls(base, 'b').map(site => site.caller.qualifiedName), ['ChildB#run']);
+});
+test('index revision changes on editing, removing and clearing documents for hierarchy invalidation', () => {
+	const index = new RubyIndex(); const revisions = [index.revision]; index.update('a.rb', 'class A\nend'); revisions.push(index.revision); index.remove('a.rb'); revisions.push(index.revision); index.clear(); revisions.push(index.revision);
+	assert.ok(revisions.every((value, position) => position === 0 || value > revisions[position - 1]));
+});
+
+
+test('a superclass factory expression does not fabricate an inheritance edge or receiver type', () => {
+	const text = 'class Base\nend\nclass Invoice < Base.build\n  def total\n    1\n  end\nend\ninvoice = Invoice.new\ninvoice.total\n'; const { index, uri, document } = indexed(text);
+	const invoice = document.symbols.find(symbol => symbol.qualifiedName === 'Invoice');
+	assert.deepEqual({ parents: index.supertypes(invoice), receiver: index.resolve(uri, text.indexOf('invoice.total') + 8).definitions }, { parents: [], receiver: [] });
+});
+
+
+test('opening an unchanged indexed file preserves existing hierarchy session identities', () => {
+	const { index, document, uri } = indexed('class Base\nend\nclass Invoice < Base\nend\n'); const revision = index.revision;
+	const reopened = index.update(uri, document.text, document.project);
+	assert.deepEqual({ revision: index.revision, identity: reopened === document, parent: index.supertypes(document.symbols[1])[0].id }, { revision, identity: true, parent: document.symbols[0].id });
+});
+
+
+test('absolute namespace completion starts at the root after a previous-line constant', () => {
+	const text = 'module Billing\n  class Invoice\n  end\nend\nBilling\n::'; const { index, uri } = indexed(text);
+	assert.deepEqual(index.completions(uri, text.length).map(symbol => symbol.qualifiedName), ['Billing']);
+});

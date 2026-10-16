@@ -35,5 +35,6 @@
 	"command.openSettings": "Settings",
 	"command.openInterpreterSettings": "Ruby SDK and Gems",
 	"command.editRunConfigurations": "Edit Run/Debug Configurations",
-	"command.installRuby": "Install Ruby"
+	"command.installRuby": "Install Ruby",
+	"command.gotoSuper": "Go to Ruby Super Method or Class"
 }

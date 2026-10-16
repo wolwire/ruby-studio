@@ -1,78 +1,115 @@
-# Visual Studio Code - Open Source ("Code - OSS")
-[![Feature Requests](https://img.shields.io/github/issues/microsoft/vscode/feature-request.svg)](https://github.com/microsoft/vscode/issues?q=is%3Aopen+is%3Aissue+label%3Afeature-request+sort%3Areactions-%2B1-desc)
-[![Bugs](https://img.shields.io/github/issues/microsoft/vscode/bug.svg)](https://github.com/microsoft/vscode/issues?utf8=✓&q=is%3Aissue+is%3Aopen+label%3Abug)
-[![Gitter](https://img.shields.io/badge/chat-on%20gitter-yellow.svg)](https://gitter.im/Microsoft/vscode)
+# Ruby Studio
 
-## The Repository
+**Ruby Studio** is an open-source, extensible integrated development environment (IDE) designed for Ruby and Ruby on Rails development.
 
-This repository ("`Code - OSS`") is where we (Microsoft) develop the [Visual Studio Code](https://code.visualstudio.com) product together with the community. Not only do we work on code and issues here, but we also publish our [roadmap](https://github.com/microsoft/vscode/wiki/Roadmap), [monthly iteration plans](https://github.com/microsoft/vscode/wiki/Iteration-Plans), and our [endgame plans](https://github.com/microsoft/vscode/wiki/Running-the-Endgame). This source code is available to everyone under the standard [MIT license](https://github.com/microsoft/vscode/blob/main/LICENSE.txt).
+Built on the open-source foundation of Visual Studio Code (Code - OSS), Ruby Studio aims to provide a powerful development experience with a focus on code navigation, project understanding, debugging, and developer productivity.
 
-## Visual Studio Code
+## Overview
 
-<p align="center">
-  <img alt="VS Code in action" src="https://github.com/user-attachments/assets/56af271c-949d-454c-a3ea-16188c063414">
-</p>
+Ruby Studio combines the flexibility and extensibility of a modern code editor with tools tailored for Ruby development.
 
-[Visual Studio Code](https://code.visualstudio.com) is a distribution of the `Code - OSS` repository with Microsoft-specific customizations released under a traditional [Microsoft product license](https://code.visualstudio.com/License/).
+The project aims to provide a comprehensive environment for working with Ruby applications, including large Ruby on Rails codebases.
 
-[Visual Studio Code](https://code.visualstudio.com) combines the simplicity of a code editor with what developers need for their core edit-build-debug cycle. It provides comprehensive code editing, navigation, and understanding support along with lightweight debugging, a rich extensibility model, and lightweight integration with existing tools.
+### Key Features
 
-Visual Studio Code is updated monthly with new features and bug fixes. You can download it for Windows, macOS, and Linux on [Visual Studio Code's website](https://code.visualstudio.com/Download). To get the latest releases every day, install the [Insiders build](https://code.visualstudio.com/insiders).
+Ruby Studio is being developed with a focus on:
+
+- **Ruby Development** — An IDE experience tailored for Ruby and Ruby on Rails.
+- **Code Navigation** — Tools for exploring classes, modules, methods, and project structure.
+- **Code Intelligence** — Improved code understanding and navigation across Ruby projects.
+- **Integrated Development Tools** — Terminal, debugging, source control, and workspace management.
+- **Extensibility** — Support for compatible extensions through the VS Code extension architecture.
+- **Cross-Platform Support** — Development targeting Linux, Windows, and macOS.
+
+Some Ruby-specific capabilities are under active development and may not yet be available in released builds.
+
+## Getting Started
+
+### Prerequisites
+
+To build Ruby Studio from source, you will need:
+
+- Git
+- Node.js and npm
+- Yarn
+- Platform-specific build dependencies
+
+Exact dependency versions depend on the underlying Code - OSS version.
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/wolwire/ruby-studio.git
+cd ruby-studio
+```
+
+### Development
+
+Ruby Studio is based on the Code - OSS architecture.
+
+Development and build instructions will be documented as the project evolves.
+
+## Project Structure
+
+Ruby Studio builds upon the modular architecture of Code - OSS.
+
+The repository includes:
+
+- `src/` — Core editor and workbench implementation.
+- `extensions/` — Built-in extensions and language support.
+- `resources/` — Application resources and branding.
+- `build/` — Build and packaging infrastructure.
+- `test/` — Automated testing infrastructure.
+
+Additional components may be introduced to support Ruby-specific functionality.
 
 ## Contributing
 
-There are many ways in which you can participate in this project, for example:
+Contributions, bug reports, and feature suggestions are welcome.
 
-* [Submit bugs and feature requests](https://github.com/microsoft/vscode/issues), and help us verify as they are checked in
-* Review [source code changes](https://github.com/microsoft/vscode/pulls)
-* Review the [documentation](https://github.com/microsoft/vscode-docs) and make pull requests for anything from typos to new content.
+If you would like to contribute:
 
-If you are interested in fixing issues and contributing directly to the code base,
-please see the document [How to Contribute](https://github.com/microsoft/vscode/wiki/How-to-Contribute), which covers the following:
+1. Fork the repository.
+2. Create a branch for your changes.
+3. Implement and test your changes.
+4. Submit a pull request describing your contribution.
 
-* [How to build and run from source](https://github.com/microsoft/vscode/wiki/How-to-Contribute)
-* [The development workflow, including debugging and running tests](https://github.com/microsoft/vscode/wiki/How-to-Contribute#debugging)
-* [Coding guidelines](https://github.com/microsoft/vscode/wiki/Coding-Guidelines)
-* [Submitting pull requests](https://github.com/microsoft/vscode/wiki/How-to-Contribute#pull-requests)
-* [Finding an issue to work on](https://github.com/microsoft/vscode/wiki/How-to-Contribute#where-to-contribute)
-* [Contributing to translations](https://aka.ms/vscodeloc)
+Please ensure that changes follow the existing code conventions and include appropriate tests where applicable.
 
-## Feedback
+## Issues and Feedback
 
-* Ask a question on [Stack Overflow](https://stackoverflow.com/questions/tagged/vscode)
-* [Request a new feature](CONTRIBUTING.md)
-* Upvote [popular feature requests](https://github.com/microsoft/vscode/issues?q=is%3Aopen+is%3Aissue+label%3Afeature-request+sort%3Areactions-%2B1-desc)
-* [File an issue](https://github.com/microsoft/vscode/issues)
-* Connect with the extension author community on [GitHub Discussions](https://github.com/microsoft/vscode-discussions/discussions) or [Slack](https://aka.ms/vscode-dev-community)
-* Follow [@code](https://x.com/code) and let us know what you think!
+For bug reports, feature requests, and technical discussions, please use the project's GitHub repository.
 
-See our [wiki](https://github.com/microsoft/vscode/wiki/Feedback-Channels) for a description of each of these channels and information on some other available community-driven channels.
+- [Report a Bug](https://github.com/wolwire/ruby-studio/issues)
+- [Request a Feature](https://github.com/wolwire/ruby-studio/issues)
+- [View Source Code](https://github.com/wolwire/ruby-studio)
 
-## Related Projects
+## Development Status
 
-Many of the core components and extensions to VS Code live in their own repositories on GitHub. For example, the [node debug adapter](https://github.com/microsoft/vscode-node-debug) and the [mono debug adapter](https://github.com/microsoft/vscode-mono-debug) repositories are separate from each other. For a complete list, please visit the [Related Projects](https://github.com/microsoft/vscode/wiki/Related-Projects) page on our [wiki](https://github.com/microsoft/vscode/wiki).
+Ruby Studio is under active development.
 
-## Bundled Extensions
+The project is evolving toward a Ruby-focused IDE with improved navigation, code intelligence, and development workflows.
 
-VS Code includes a set of built-in extensions located in the [extensions](extensions) folder, including grammars and snippets for many languages. Extensions that provide rich language support (inline suggestions, Go to Definition) for a language have the suffix `language-features`. For example, the `json` extension provides coloring for `JSON` and the `json-language-features` extension provides rich language support for `JSON`.
+Features, APIs, and build processes may change as development progresses.
 
-## Development Container
+## Acknowledgments
 
-This repository includes a Visual Studio Code Dev Containers / GitHub Codespaces development container.
+Ruby Studio is built upon [Visual Studio Code - Open Source (Code - OSS)](https://github.com/microsoft/vscode), originally developed by Microsoft and its open-source contributors.
 
-* For [Dev Containers](https://aka.ms/vscode-remote/download/containers), use the **Dev Containers: Clone Repository in Container Volume...** command which creates a Docker volume for better disk I/O on macOS and Windows.
-  * If you already have VS Code and Docker installed, you can also click [here](https://vscode.dev/redirect?url=vscode://ms-vscode-remote.remote-containers/cloneInVolume?url=https://github.com/microsoft/vscode) to get started. This will cause VS Code to automatically install the Dev Containers extension if needed, clone the source code into a container volume, and spin up a dev container for use.
+We acknowledge and appreciate the work of the Code - OSS community and the maintainers of the open-source libraries and tools used by this project.
 
-* For Codespaces, install the [GitHub Codespaces](https://marketplace.visualstudio.com/items?itemName=GitHub.codespaces) extension in VS Code, and use the **Codespaces: Create New Codespace** command.
-
-Docker / the Codespace should have at least **4 cores and 6 GB of RAM (8 GB recommended)** to run a full build. See the [development container README](.devcontainer/README.md) for more information.
-
-## Code of Conduct
-
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+Ruby Studio is an independent project and is not affiliated with, endorsed by, or sponsored by Microsoft.
 
 ## License
 
+Ruby Studio is based on Code - OSS, which is licensed under the MIT License.
+
+The original Code - OSS source code includes the following copyright notice:
+
 Copyright (c) Microsoft Corporation. All rights reserved.
 
-Licensed under the [MIT](LICENSE.txt) license.
+Licensed under the MIT License.
+
+See [LICENSE.txt](LICENSE.txt) for the applicable license terms.
+
+Third-party components may be subject to additional licenses and attribution requirements.

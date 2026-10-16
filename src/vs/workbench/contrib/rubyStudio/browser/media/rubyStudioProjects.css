@@ -1,0 +1,16 @@
+/* Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. */
+.monaco-dialog-box.ruby-studio-project-dialog { width: min(780px, 90vw); max-width: 90vw; }
+.ruby-project-form { display: grid; grid-template-columns: 170px minmax(300px, 1fr); gap: 24px; text-align: left; padding: 12px 0; }
+.ruby-project-types { border-right: 1px solid var(--vscode-widget-border); padding-right: 18px; }
+.ruby-project-types .selected { padding: 10px 8px; margin: 8px 0 20px; background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+.ruby-project-row { display: grid; grid-template-columns: 76px minmax(120px, 1fr) auto; gap: 8px; align-items: center; margin-bottom: 16px; }
+.ruby-project-row input, .ruby-project-row select { box-sizing: border-box; min-width: 0; padding: 7px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); font: inherit; }
+.ruby-project-row select { grid-column: span 2; }
+.ruby-project-form button, .ruby-project-welcome button { cursor: pointer; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); border: 1px solid var(--vscode-button-border, transparent); padding: 6px 10px; font: inherit; }
+.ruby-project-form button:focus-visible, .ruby-project-form input:focus, .ruby-project-form select:focus, .ruby-project-welcome button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.ruby-project-controls { display: flex; gap: 8px; margin-left: 84px; }
+.ruby-project-preview { color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; min-height: 20px; margin: -8px 0 16px 84px; }
+.ruby-project-error { color: var(--vscode-errorForeground); min-height: 36px; margin-top: 16px; }
+.ruby-project-welcome { min-width: 460px; max-width: 70vw; text-align: left; }
+.ruby-project-welcome h3 { margin: 16px 0 8px; }
+.ruby-project-welcome .recent-project { display: block; width: 100%; text-align: left; margin: 4px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
