@@ -26,7 +26,7 @@ ruby_studio_native
 if [[ "$integration_only" == 0 ]]; then
 	ruby_studio_run check-native cargo check --locked --manifest-path extensions/ruby-studio/native/Cargo.toml
 	ruby_studio_run test-native cargo test --locked --manifest-path extensions/ruby-studio/native/Cargo.toml
-	ruby_studio_run test-unit node --test --test-reporter=tap extensions/ruby-studio/test/*.test.js extensions/ruby-studio/native/tests/parity.test.js scripts/lib/ruby-studio-platform.test.mjs
+	ruby_studio_run test-unit node --test --test-reporter=tap extensions/ruby-studio/test/*.test.js extensions/ruby-studio/native/tests/parity.test.js scripts/lib/ruby-studio-*.test.mjs
 fi
 if [[ "$unit_only" == 1 ]]; then printf '\nRuby Studio unit/native validation passed. Logs: %s\n' "$RUBY_STUDIO_LOG_DIR"; exit 0; fi
 ruby_studio_run verify-integration-app node scripts/lib/ruby-studio-artifact.mjs verify "$RUBY_STUDIO_APP_DIR"

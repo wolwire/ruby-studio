@@ -70,6 +70,13 @@ export async function buildRunPlan(configuration: RubyRunConfiguration, sdk: Run
 		try { await fs.access(path.join(cwd, 'Gemfile')); } catch { throw new Error('Bundler was selected, but this working directory has no Gemfile.'); }
 		rubyArgs = normalizeRubyArguments(['-S', 'bundle', 'exec', sdk.ruby, ...rubyArgs]);
 	}
+	if (process.platform === 'win32' && args.length) {
+		// Ruby's Windows argv parser treats apostrophes and globs specially even
+		// without a shell. Keep configured program arguments off the command line.
+		rubyArgs.splice(-args.length);
+		env.RUBY_STUDIO_RUN_ARGUMENTS = JSON.stringify(args);
+		rubyArgs.unshift('-r', path.join(__dirname, '..', 'ruby', 'run_arguments.rb'));
+	}
 	return { name: configuration.name, executable: sdk.ruby, args: rubyArgs, cwd, env, script };
 }
 

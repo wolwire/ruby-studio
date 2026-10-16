@@ -11,7 +11,8 @@ import { createHash } from 'node:crypto';
 import { target, readApp } from './ruby-studio-platform.mjs';
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const [mode, app, destination] = process.argv.slice(2);
+const [mode, appArgument, destination] = process.argv.slice(2);
+const app = appArgument ? path.resolve(appArgument) : undefined;
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const executable = file => { fs.accessSync(file, fs.constants.X_OK); return file; };
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
@@ -23,7 +24,7 @@ try {
 	const extension = json(path.join(extensionRoot, 'package.json'));
 	const application = executable(applicationPath);
 	const entry = path.resolve(extensionRoot, extension.main);
-	if (!entry.startsWith(`${extensionRoot}${path.sep}`) || !fs.statSync(entry).isFile()) { throw new Error(`Packaged extension entry point is missing: ${entry}`); }
+	if (!entry.startsWith(`${extensionRoot}${path.sep}`) || !fs.existsSync(entry) || !fs.statSync(entry).isFile()) { throw new Error(`Packaged extension entry point is missing: ${entry}`); }
 	const worker = executable(path.join(extensionRoot, 'native/bin', host.id, host.worker));
 	const builtWorker = path.join(source, 'extensions/ruby-studio/native/bin', host.id, host.worker);
 	if (fs.existsSync(builtWorker) && digest(worker) !== digest(builtWorker)) { throw new Error('Packaged native worker differs from the current built worker. Rebuild the desktop app.'); }

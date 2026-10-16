@@ -24,9 +24,15 @@ On Linux, add `--ci-toolchain` to setup (or to build with `--setup`) to download
 
 On Windows, install Visual Studio 2022 with Desktop development with C++, the v143 toolset, x64/x86 Spectre-mitigated libraries, C++ ATL/MFC Spectre libraries, a Windows SDK, Python and Git. Add the SDK's x64 `signtool.exe` directory and 7-Zip's `7z.exe` to PATH. `vs2022_install` can select a custom Visual Studio installation. The setup command patches Electron/V8 headers before root dependencies are installed, as the upstream Windows workflow requires. Use RubyInstaller Ruby 3.3 with its Devkit and the test gems below. GitHub's Windows runner supplies these native prerequisites.
 
-On macOS, install Xcode command-line tools (`xcode-select --install`), Python with setuptools, Git, Rust, Node and Ruby. Activate the Intel or Apple Silicon versions matching your machine. The script supplies the upstream `kerberos_use_rtld=false` build definition. macOS archives use `ditto` to preserve `.app` framework links and executable modes.
+On macOS, install Xcode command-line tools (`xcode-select --install`), Python with setuptools, Git, Rust, Node and Ruby. Activate the Intel or Apple Silicon versions matching your machine. The script supplies the upstream `kerberos_use_rtld=false` build definition. The native worker is ad-hoc signed before bundling; the rebranded app and its nested Electron components are then ad-hoc signed with the existing Electron signing dependency. Packaging verifies signatures and architecture, uses `ditto` to preserve framework links and executable modes, extracts the resulting ZIP, and repeats signature checks and the real desktop tests against that extracted app. A failure prevents uploading the distribution. Ad-hoc signing seals the bundle but does not establish a trusted developer identity or Apple notarization.
 
 Outputs are `../VSCode-linux-x64/ruby-studio`, `../VSCode-win32-x64/Ruby Studio.exe`, and `../VSCode-darwin-{x64,arm64}/Ruby Studio.app`. Archives in `dist/ruby-studio` are Linux `.tar.gz`, Windows portable `.zip`, and separate Intel/Apple Silicon macOS `.zip` bundles. Each includes build metadata and SHA-256 checksums. These are development distributions: the pipeline does not provide Windows Authenticode signing, Apple Developer signing/notarization, DMG or EXE installers. OS download security prompts can apply. Ruby itself and project gems are selected/installed separately; they are not bundled with the IDE.
+
+### Install the macOS development build
+
+Use `darwin-arm64` for an Apple Silicon Mac and `darwin-x64` for an Intel Mac; macOS 12 or newer is required by the current Electron bundle. GitHub Actions downloads an outer artifact ZIP containing the versioned app ZIP, build metadata and checksums. Extract the outer ZIP, then extract `ruby-studio-darwin-…zip` to get `Ruby Studio.app`, and drag the app to Applications. Open the copy in Applications. There is no installer wizard.
+
+For an unidentified-developer or “Apple cannot check” prompt, follow [Apple's per-app approval instructions](https://support.apple.com/en-us/102445) in System Settings → Privacy & Security → Open Anyway, only for a build you intended to download. A “damaged” message is a separate failure: report the exact message and build commit rather than disabling Gatekeeper. Releases that open without this approval require an Apple Developer ID certificate and notarization credentials; ad-hoc signing does not provide those.
 
 ## Linux first build
 
@@ -120,8 +126,40 @@ If Ruby is supplied by a version manager, activate that environment before runni
 
 ## GitHub Actions
 
-`.github/workflows/ruby-studio-build.yml` (**Ruby Studio Desktop**) runs on pushes, pull requests and manual dispatch with four independent native runner jobs: Ubuntu 24.04 x64, Windows Server 2022 x64, macOS 15 Intel and macOS 15 Apple Silicon. A failed job does not cancel the other platforms. It installs the Node version from `.nvmrc`, Ruby test dependencies and the upstream native compiler; compiles before running unit, Rust, lexer-parity and Xvfb desktop tests; then archives only the successfully tested app for each platform. All platforms run the extension-host integration and dedicated native settings-window tests; the existing Linux `/proc` process-group assertion is explicitly Linux-only. The distribution and logs are separate, platform-named downloadable artifacts, retained for 14 days. Artifact names include the full checkout SHA and archive names include its abbreviated build receipt SHA. Logs upload even when a build or test fails. Existing upstream workflows are preserved. Checkout leaves the inherited Copilot simulation SQLite caches as LFS pointers; those caches are not part of this desktop build or its test suite.
+`.github/workflows/ruby-studio-build.yml` (**Ruby Studio Desktop**) runs on pushes, pull requests and manual dispatch with four independent native runner jobs: Ubuntu 24.04 x64, Windows Server 2022 x64, macOS 15 Intel and macOS 15 Apple Silicon. A failed job does not cancel the other platforms. It installs the Node version from `.nvmrc`, Ruby test dependencies and the upstream native compiler; compiles before running unit, Rust, lexer-parity and Xvfb desktop tests; then archives only the successfully tested app for each platform. All platforms run the extension-host integration and dedicated native settings-window tests; the existing Linux `/proc` process-group assertion is explicitly Linux-only. The distribution and logs are separate, platform-named downloadable artifacts, retained for 14 days. Artifact names include the full checkout SHA and archive names include its abbreviated build receipt SHA. Logs upload even when a build or test fails, with separate names for each run attempt. Rerunning a job replaces only that platform's successfully tested distribution. Windows setup retries the observed npm subprocess native error `0xC0000409` up to three times while preserving failed-attempt logs; other dependency/compiler errors stop immediately. Existing upstream workflows are preserved. Checkout leaves the inherited Copilot simulation SQLite caches as LFS pointers; those caches are not part of this desktop build or its test suite.
 
 The workflow uses read-only repository permissions and commit-pinned actions. Action versions were checked against their primary release documentation on 2026-10-14: [checkout 7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1), [setup-node 7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0), [upload-artifact 7.0.2](https://github.com/actions/upload-artifact/releases/tag/v7.0.2), and [setup-ruby 1.327.0](https://github.com/ruby/setup-ruby/releases/tag/v1.327.0). The [workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax) and [artifact action documentation](https://github.com/actions/upload-artifact) describe the triggers and upload behavior used here.
 
 After the workflow is committed and pushed to the fork, open its **Actions → Ruby Studio Desktop** page to view results or use **Run workflow**. The scripts themselves do not push commits, publish releases or upload artifacts outside a workflow run.
+
+For a fast Windows UI investigation, manually dispatch **Ruby Studio Desktop** with `diagnostic_build_run_id` set to a run containing a tested Windows distribution. This mode verifies that existing archive's checksums/provenance and repeats the native extension-host suite followed by settings/run windows with five fresh profiles. It uploads renderer, frame, service-worker and timing diagnostics without rebuilding or producing release distributions. Leave the input empty for the normal four-platform build. Diagnostic runs cannot be promoted by the publisher because they do not contain the required four distribution artifacts. The `desktop-test` CLI command runs this same native sequence against `RUBY_STUDIO_APP_DIR`; Windows/macOS reuse the prebuilt app without compilation, while Linux retains the normal compiled integration path.
+
+`diagnostic_use_current_webview` overlays the checkout's two raw webview bootstrap assets onto that disposable Windows extraction, after verifying the original archive. The job logs both the archive commit and overlay commit. This isolates bootstrap changes during investigation; the modified app is never uploaded as a distribution. Normal builds still compile and test the complete app from one commit.
+
+## Publish a GitHub Release manually
+
+The **Ruby Studio Publish** workflow promotes the exact packages from a completed **Ruby Studio Desktop** build. It does not rebuild them. The selected run must succeed for all four platforms, come from this repository through a push or manual build, and still have its distribution artifacts available. If the 14-day artifacts have expired, run a new desktop build first.
+
+After this workflow is merged into the default branch:
+
+1. Open **Actions → Ruby Studio Publish → Run workflow**.
+2. Enter the successful desktop **build run ID** (the number at the end of its Actions run URL) and a new **tag**, such as `v0.1.0`.
+3. Choose **draft**, **prerelease**, **release** or **verify-only**, then run it. Draft is the default. Verify-only downloads and checks everything without creating a tag or release. Release publishes a stable release and marks it latest; prerelease publishes without marking it latest.
+
+The GitHub CLI equivalent is:
+
+```bash
+gh workflow run ruby-studio-publish.yml --ref ruby-studio \
+  -f build_run_id=YOUR_SUCCESSFUL_RUN_ID -f tag=v0.1.0 -f mode=draft
+```
+
+Publication uses the built-in `GITHUB_TOKEN` with Actions read and repository contents write permissions. No personal access token is needed. Inputs are passed as environment variables and quoted arguments. The publisher checks the source SHA, clean build receipts, app version agreement, all four platform artifacts, filenames and SHA-256 hashes before creating a release. It refuses existing tags/releases and never replaces assets or moves tags. PR/fork build artifacts are not eligible.
+
+Each release contains four platform archives, four `.build-info.json` files, a combined `SHA256SUMS`, and `release-manifest.json` recording the source commit and build evidence URL. A release tag labels this tested build; it does not rewrite the app's embedded upstream version. The publisher stages the upload in a draft, verifies uploaded asset sizes and available GitHub digests, and publishes as its final operation. If upload verification fails, inspect the remaining draft before retrying. Code signing and notarization are not added by publication.
+
+For a local read-only verification using an authenticated `gh` installation:
+
+```bash
+node scripts/publish-ruby-studio.mjs --repo wolwire/ruby-studio \
+  --run-id YOUR_SUCCESSFUL_RUN_ID --tag v0.1.0 --mode verify-only
+```

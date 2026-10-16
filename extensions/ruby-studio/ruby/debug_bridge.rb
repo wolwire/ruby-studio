@@ -25,6 +25,7 @@ module RubyStudio
     def initialize(target)
       @target = File.realpath(target)
       @root = File.realpath(Dir.pwd)
+      @source_paths = {}
       @socket = TCPSocket.new('127.0.0.1', Integer(ENV.fetch('RUBY_STUDIO_DEBUG_PORT')))
       @socket.sync = true
       @main_thread = Thread.current
@@ -110,12 +111,20 @@ module RubyStudio
       []
     end
 
+    # Ruby loads the real target path, while editors can send a symlink alias
+    # (including macOS /var -> /private/var). Match both to the same file.
+    def canonical_path(filename)
+      File.realpath(filename)
+    rescue SystemCallError
+      File.expand_path(filename)
+    end
+
     def command(message)
       id = message['id']
       args = message['arguments'] || {}
       case message['command']
       when 'setBreakpoints'
-        filename = File.expand_path(args.fetch('path'))
+        filename = canonical_path(args.fetch('path'))
         lines = executable_lines(filename)
         selected = Array(args['lines']).map do |line|
           requested = Integer(line)
@@ -198,7 +207,7 @@ module RubyStudio
       receive(true) until @started
       trace = TracePoint.new(:line, :call, :return, :b_call, :b_return) do |event|
         next unless Process.pid == @process_id && Thread.current == @main_thread
-        filename = File.expand_path(event.path)
+        filename = @source_paths[event.path] ||= canonical_path(event.path)
         next unless user_path?(filename)
         case event.event
         when :call, :b_call
@@ -232,6 +241,8 @@ module RubyStudio
   end
 end
 
+arguments = ENV.delete('RUBY_STUDIO_DEBUG_ARGUMENTS')
+ARGV.concat(JSON.parse(arguments)) if arguments
 target = ARGV.shift
 abort 'A Ruby script is required' unless target
 RubyStudio::DebugBridge.new(target).run

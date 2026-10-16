@@ -8,7 +8,7 @@
 /** @type {ServiceWorkerGlobalScope} */
 const sw = /** @type {any} */ (self);
 
-const VERSION = 5;
+const VERSION = 6;
 
 const resourceCacheName = `vscode-resource-cache-${VERSION}`;
 
@@ -145,6 +145,11 @@ sw.addEventListener('message', async (event) => {
 	/** @type {Client} */
 	const source = event.source;
 	switch (event.data.channel) {
+		case 'claim-client': {
+			// Newly detached windows may have missed the activation-time claim.
+			event.waitUntil(sw.clients.claim());
+			return;
+		}
 		case 'did-load-resource': {
 			/** @type {ResourceResponse} */
 			const response = event.data.data;

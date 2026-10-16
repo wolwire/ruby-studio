@@ -9,14 +9,14 @@ const path = require('node:path');
 const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { resolveRuntime } = require('../out/runtime');
+const { resolveRuntime, findExecutable } = require('../out/runtime');
 const { parseRunConfigurations, buildRunPlan } = require('../out/execution');
 const execute = promisify(execFile);
 let directory;
 let sdk;
 
 before(async () => {
-	directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ruby studio runtime-'));
+	directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'ruby studio runtime-')));
 	sdk = await resolveRuntime({ cwd: directory, configuredPath: process.env.RUBY_STUDIO_RUBY || 'ruby', trusted: true });
 });
 after(async () => { await fs.rm(directory, { recursive: true, force: true }); });
@@ -24,7 +24,7 @@ after(async () => { await fs.rm(directory, { recursive: true, force: true }); })
 test('SDK resolution validates real Ruby and preserves its gem/library environment', async () => {
 	const { stdout } = await execute(sdk.ruby, ['-rjson', '-rrubygems', '-ropenssl', '-e', 'puts JSON.generate({cwd: Dir.pwd, gems: Gem.path, version: RUBY_VERSION, openssl: OpenSSL::OPENSSL_VERSION})'], { cwd: sdk.cwd, env: sdk.env });
 	const result = JSON.parse(stdout);
-	assert.deepEqual({ cwd: result.cwd, version: /^\d+\.\d+/.test(result.version), gems: result.gems.length > 0, openssl: result.openssl.startsWith('OpenSSL') }, { cwd: directory, version: true, gems: true, openssl: true });
+	assert.deepEqual({ cwd: path.normalize(result.cwd), version: /^\d+\.\d+/.test(result.version), gems: result.gems.length > 0, openssl: result.openssl.startsWith('OpenSSL') }, { cwd: directory, version: true, gems: true, openssl: true });
 });
 
 test('untrusted SDK resolution cannot execute even an explicitly selected wrapper', async () => {
@@ -44,9 +44,10 @@ test('run plan preserves cwd, environment and argument boundaries with real Ruby
 	await fs.mkdir(working);
 	const script = path.join(working, 'main file.rb');
 	await fs.writeFile(script, 'require "json"\nputs JSON.generate({args: ARGV, cwd: Dir.pwd, marker: ENV["APP_MARKER"]})\n');
-	const plan = await buildRunPlan({ name: 'Arguments', type: 'ruby', script: 'main file.rb', cwd: 'working directory', args: ['with spaces', "quote' and \"double\"", '$(touch should-not-exist)'], env: { APP_MARKER: '${workspaceFolder}' } }, sdk);
+	const plan = await buildRunPlan({ name: 'Arguments', type: 'ruby', script: 'main file.rb', cwd: 'working directory', args: ["quote'", '*', '', '💎', 'with spaces', "quote' and \"double\"", '$(touch should-not-exist)'], env: { APP_MARKER: '${workspaceFolder}' } }, sdk);
 	const { stdout } = await execute(plan.executable, plan.args, { cwd: plan.cwd, env: plan.env });
-	assert.deepEqual(JSON.parse(stdout), { args: ['with spaces', "quote' and \"double\"", '$(touch should-not-exist)'], cwd: working, marker: directory });
+	const output = JSON.parse(stdout);
+	assert.deepEqual({ ...output, cwd: path.normalize(output.cwd) }, { args: ["quote'", '*', '', '💎', 'with spaces', "quote' and \"double\"", '$(touch should-not-exist)'], cwd: working, marker: directory });
 	await assert.rejects(fs.access(path.join(working, 'should-not-exist')), { code: 'ENOENT' });
 });
 
@@ -86,16 +87,22 @@ test('real Ruby warnings and syntax errors retain different task diagnostic seve
 	const warningFile = path.join(directory, 'warning.rb');
 	await fs.writeFile(warningFile, 'unused = 1\n');
 	const warning = await execute(sdk.ruby, ['-w', warningFile], { cwd: sdk.cwd, env: sdk.env });
-	const warningMatch = warning.stderr.split('\n').map(line => pattern.exec(line)).find(Boolean);
-	assert.equal(warningMatch?.[matcher.pattern.file], warningFile);
+	const warningMatch = warning.stderr.split(/\r?\n/).map(line => pattern.exec(line)).find(Boolean);
+	assert.equal(path.normalize(warningMatch?.[matcher.pattern.file] || ''), warningFile);
 	assert.equal(warningMatch?.[matcher.pattern.severity], 'warning');
 	const errorFile = path.join(directory, 'syntax_error.rb');
 	await fs.writeFile(errorFile, '(\n');
 	await assert.rejects(execute(sdk.ruby, ['-c', errorFile], { cwd: sdk.cwd, env: sdk.env }), error => {
-		const errorMatch = error.stderr.split('\n').map(line => pattern.exec(line)).find(Boolean);
-		assert.equal(errorMatch?.[matcher.pattern.file], errorFile);
+		const errorMatch = error.stderr.split(/\r?\n/).map(line => pattern.exec(line)).find(Boolean);
+		assert.equal(path.normalize(errorMatch?.[matcher.pattern.file] || ''), errorFile);
 		assert.equal(errorMatch?.[matcher.pattern.severity] || matcher.severity, 'error');
 		assert.match(errorMatch?.[matcher.pattern.message] || '', /syntax error/);
 		return true;
 	});
+});
+
+// Windows environment keys retain their original casing when copied to objects.
+test('Windows SDK discovery honors the native Path environment key', { skip: process.platform !== 'win32' }, async () => {
+	const found = await findExecutable(path.basename(sdk.ruby), { Path: path.dirname(sdk.ruby) }, directory);
+	assert.equal(await fs.realpath(found), await fs.realpath(sdk.ruby));
 });

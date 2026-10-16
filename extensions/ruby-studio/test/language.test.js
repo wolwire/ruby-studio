@@ -344,9 +344,9 @@ const hasRuby = spawnSync(ruby, ['--version'], { encoding: 'utf8' }).status === 
 test('scope-safe local rename preserves actual Ruby output', { skip: !hasRuby }, () => {
 	const text = 'def calculate(value)\n  total = value * 2\n  [3].each do |value|\n    total += value\n  end\n  total\nend\nputs calculate(4)\n'; const { index, uri } = indexed(text); const renamed = index.rename(uri, text.indexOf('value'), 'price');
 	const before = spawnSync(ruby, ['-'], { input: text, encoding: 'utf8' }); const after = spawnSync(ruby, ['-'], { input: rewritten(text, renamed.edits.get(uri)), encoding: 'utf8' });
-	assert.deepEqual([before.status, before.stdout, after.status, after.stdout], [0, '11\n', 0, '11\n']);
+	assert.deepEqual([before.status, before.stdout.replace(/\r\n/g, '\n'), after.status, after.stdout.replace(/\r\n/g, '\n')], [0, '11\n', 0, '11\n']);
 });
 test('keyword shorthand rename preserves actual Ruby keyword arguments', { skip: !hasRuby }, () => {
 	const text = 'def consume(value:)\n  value\nend\ndef run(value)\n  consume(value:)\nend\nputs run(7)\n'; const { index, uri } = indexed(text); const renamed = index.rename(uri, text.indexOf('run(value)') + 4, 'amount');
-	const result = spawnSync(ruby, ['-'], { input: rewritten(text, renamed.edits.get(uri)), encoding: 'utf8' }); assert.deepEqual([result.status, result.stdout], [0, '7\n']);
+	const result = spawnSync(ruby, ['-'], { input: rewritten(text, renamed.edits.get(uri)), encoding: 'utf8' }); assert.deepEqual([result.status, result.stdout.replace(/\r\n/g, '\n')], [0, '7\n']);
 });

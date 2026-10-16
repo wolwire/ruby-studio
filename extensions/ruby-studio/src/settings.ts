@@ -123,7 +123,6 @@ export function registerSettings(context: vscode.ExtensionContext, runtime: Runt
 		const nonce = randomBytes(16).toString('hex');
 		const script = panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'settings.js'));
 		const styles = panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'settings.css'));
-		panel.webview.html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource}; script-src 'nonce-${nonce}'"><link rel="stylesheet" href="${styles}"></head><body><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`;
 		// Move only after this panel becomes the active editor, so the user's source
 		// editor cannot be accidentally detached while the webview is opening.
 		await new Promise<void>(resolve => {
@@ -134,6 +133,9 @@ export function registerSettings(context: vscode.ExtensionContext, runtime: Runt
 		});
 		const active = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
 		if (active instanceof vscode.TabInputWebview && active.viewType.includes(`rubyStudio.${mode}`)) { await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow'); }
+		// Moving recreates the webview in the destination renderer. Load its HTML
+		// after ownership transfers so startup content/messages cannot be lost.
+		if (!disposed) { panel.webview.html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource}; script-src 'nonce-${nonce}'"><link rel="stylesheet" href="${styles}"></head><body><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`; }
 	};
 	disposables.push(vscode.commands.registerCommand('rubyStudio.openSettings', () => open('settings')), vscode.commands.registerCommand('rubyStudio.openInterpreterSettings', () => open('settings', 'sdk')), vscode.commands.registerCommand('rubyStudio.editRunConfigurations', () => open('runs')));
 	return disposables;

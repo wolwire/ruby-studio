@@ -2,11 +2,11 @@
 
 The bundled original Ruby implementation is in `extensions/ruby-studio`. Native workbench contributions are in `src/vs/workbench/contrib/rubyStudio`.
 
-This fork targets a Linux x64 desktop build and preserves the VS Code MIT license and dependency notices. It uses no third-party Ruby IDE engine. The Rust scanner is std-only; the Ruby debugger uses TracePoint/Socket/JSON; project test reporters integrate the installed Minitest or RSpec framework.
+This fork builds native Windows x64, Linux x64, macOS Intel and Apple Silicon desktop apps and preserves the VS Code MIT license and dependency notices. It uses no third-party Ruby IDE engine. The Rust scanner is std-only; the Ruby debugger uses TracePoint/Socket/JSON; project test reporters integrate the installed Minitest or RSpec framework.
 
-Build with `scripts/build-ruby-studio.sh`; add `--setup --check --package` for dependency installation, validation and a downloadable archive. See [BUILDING_RUBY_STUDIO.md](BUILDING_RUBY_STUDIO.md) for clean-machine prerequisites and the GitHub Actions workflow. Node24.15.0 and the private Rust toolchain are discovered beside this checkout. Existing node_modules dependencies must be installed first using the upstream native build prerequisites. The product package is written beside the checkout to `VSCode-linux-x64`; its binary is `ruby-studio`.
+Build with `node scripts/ruby-studio.mjs build`; add `--setup --check --package` for dependency installation, validation and a downloadable archive. See [BUILDING_RUBY_STUDIO.md](BUILDING_RUBY_STUDIO.md) for clean-machine prerequisites and the GitHub Actions workflow. Use the Node version in `.nvmrc` and stable Rust. The Linux wrappers can also discover the private toolchain beside this checkout. Existing node_modules dependencies must be installed first using the upstream native build prerequisites. The product package is written beside the checkout to `VSCode-PLATFORM-ARCH`. GitHub Actions builds and tests all four targets and uploads archives, metadata and checksums.
 
-After building, set `RUBY_STUDIO_RUBY` to the selected Ruby executable and run `scripts/test-ruby-studio.sh`. The script checks compilation before tests, runs worker/model/runtime tests and then launches a disposable real extension-host integration workspace. It preserves the production user profile.
+After building, set `RUBY_STUDIO_RUBY` to the selected Ruby executable and run `node scripts/ruby-studio.mjs test`. The script checks compilation before tests, runs worker/model/runtime tests and then launches a disposable real extension-host integration workspace. It preserves the production user profile.
 
 Workspace-level run configurations use `.ruby-studio/run-configurations.json`. Users can select a Ruby SDK in the status bar. Project execution is gated on workspace trust. Built-in support is available without installing an extension pack.
 

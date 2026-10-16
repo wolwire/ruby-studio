@@ -72,8 +72,8 @@ export class RubyDebugBridge extends EventEmitter {
 		await new Promise<void>((resolve, reject) => { bridge.server!.once('error', reject); bridge.server!.listen(0, '127.0.0.1', resolve); });
 		const address = bridge.server.address();
 		if (!address || typeof address === 'string') { bridge.dispose(); throw new Error('Cannot bind the Ruby debugger transport.'); }
-		bridge.child = spawn(options.runtime.ruby, [...(options.rubyArgs || []), options.bridgePath, options.script, ...(options.args || [])], {
-			cwd: options.runtime.cwd, env: { ...options.runtime.env, RUBY_STUDIO_DEBUG_PORT: String(address.port), RUBY_STUDIO_DEBUG_TOKEN: token }, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true
+		bridge.child = spawn(options.runtime.ruby, [...(options.rubyArgs || []), options.bridgePath, options.script, ...(process.platform === 'win32' ? [] : options.args || [])], {
+			cwd: options.runtime.cwd, env: { ...options.runtime.env, ...(process.platform === 'win32' ? { RUBY_STUDIO_DEBUG_ARGUMENTS: JSON.stringify(options.args || []) } : {}), RUBY_STUDIO_DEBUG_PORT: String(address.port), RUBY_STUDIO_DEBUG_TOKEN: token }, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true
 		});
 		bridge.child.stdout?.on('data', data => bridge.emit('output', { category: 'stdout', output: data.toString() }));
 		bridge.child.stderr?.on('data', data => bridge.emit('output', { category: 'stderr', output: data.toString() }));
