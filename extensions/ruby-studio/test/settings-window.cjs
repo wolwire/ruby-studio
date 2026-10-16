@@ -94,6 +94,15 @@ async function until(fn, label, milliseconds = 20000) { const end = Date.now() +
 				}
 			}
 		});
+		await check('Ruby SDK installer is available without changing the selected interpreter', async () => {
+			const before = await readSettings(); ({ page, frame } = await openSdk());
+			await frame.getByLabel('Ruby Version', { exact: true }).waitFor();
+			assert.equal(await frame.getByRole('button', { name: 'Install Ruby', exact: true }).isDisabled(), true);
+			assert.equal(await frame.getByRole('button', { name: 'Stop Installation', exact: true }).isDisabled(), true);
+			await frame.getByRole('button', { name: 'Refresh Versions', exact: true }).waitFor();
+			if (process.env.RUBY_STUDIO_INSTALL_SCREENSHOT) { await page.screenshot({ path: process.env.RUBY_STUDIO_INSTALL_SCREENSHOT }); }
+			await closeDialog(page, frame, 'Cancel'); assert.deepEqual(await readSettings(), before);
+		});
 		reports.success = true;
 	} catch (error) {
 		reports.success = false; reports.error = error.stack; console.error(error); process.exitCode = 1;
